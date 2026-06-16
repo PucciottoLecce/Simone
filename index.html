@@ -835,47 +835,126 @@ function addVoce(v) {
   renderVoci();
 }
 
-function renderVoci() {
-  const tbody = document.getElementById('voci-body');
-  tbody.innerHTML = '';
+function aggiornaVociTotali() {
   let imponibile = 0, ivaTotal = 0;
-  vociData.forEach((v, i) => {
-    const qty    = parseFloat(v.qty) || 0;
+  vociData.forEach(v => {
+    const qty = parseFloat(v.qty) || 0;
     const prezzo = parseFloat(v.prezzo) || 0;
-    const iva    = (v.iva === 'bollo') ? 0 : (parseFloat(v.iva) || 0);
     const isBollo = v.iva === 'bollo';
     const ivaRate = isBollo ? 0 : (parseFloat(v.iva) || 0);
-    const tot    = qty * prezzo;
-    imponibile  += tot;
-    ivaTotal    += isBollo ? 2 : (tot * ivaRate / 100);
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td><input type="text" value="${esc(v.desc)}" oninput="vociData[${i}].desc=this.value;formDirty=true" /></td>
-      <td><input type="number" value="${qty}" min="0" step="any" oninput="vociData[${i}].qty=parseFloat(this.value)||0;formDirty=true;renderVoci()" style="text-align:right;" /></td>
-      <td><input type="text" value="${esc(v.um)}" oninput="vociData[${i}].um=this.value;formDirty=true" style="text-align:center;" /></td>
-      <td><input type="number" value="${prezzo}" min="0" step="any" oninput="vociData[${i}].prezzo=parseFloat(this.value)||0;formDirty=true;renderVoci()" style="text-align:right;" /></td>
-      <td>
-        <select onchange="vociData[${i}].iva=this.value==='bollo'?'bollo':parseFloat(this.value);formDirty=true;renderVoci()">
-          ${[0,4,5,10,22].map(r=>`<option value="${r}" ${v.iva==r?'selected':''}>${r}%</option>`).join('')}
-          <option value="bollo" ${v.iva==='bollo'?'selected':''}>Marca da bollo (€ 2,00)</option>
-        </select>
-      </td>
-      <td class="td-totale" style="text-align:right;">${isBollo ? '(+ € 2,00 bollo)' : '€ ' + fmt(tot)}</td>
-      <td class="td-del"><button class="btn-del-row" onclick="vociData.splice(${i},1);formDirty=true;renderVoci()" title="Rimuovi">×</button></td>
-    `;
-    tbody.appendChild(tr);
+    const tot = qty * prezzo;
+    imponibile += tot;
+    ivaTotal += isBollo ? 2 : (tot * ivaRate / 100);
   });
-  // Righe vuote visive
-  const righeVuote = Math.max(0, 5 - vociData.length);
-  for (let e = 0; e < righeVuote; e++) {
-    const emptyTr = document.createElement('tr');
-    emptyTr.className = 'row-empty';
-    emptyTr.innerHTML = `<td></td><td></td><td></td><td></td><td></td><td></td><td></td>`;
-    tbody.appendChild(emptyTr);
-  }
   document.getElementById('tot-imponibile').textContent = '€ ' + fmt(imponibile);
   document.getElementById('tot-iva').textContent = '€ ' + fmt(ivaTotal);
   document.getElementById('tot-totale').textContent = '€ ' + fmt(imponibile + ivaTotal);
+}
+
+function renderVoci() {
+  const tbody = document.getElementById('voci-body');
+  const isMobile = window.innerWidth <= 640;
+  tbody.innerHTML = '';
+
+  if (isMobile) {
+    // Layout a card verticali su mobile
+    vociData.forEach((v, i) => {
+      const qty = parseFloat(v.qty) || 0;
+      const prezzo = parseFloat(v.prezzo) || 0;
+      const isBollo = v.iva === 'bollo';
+      const tot = qty * prezzo;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td colspan="7" style="padding:0;border-bottom:2px solid #ebebeb;">
+          <div style="padding:12px;background:#fff;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+              <span style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;">Voce ${i+1}</span>
+              <button onclick="vociData.splice(${i},1);formDirty=true;renderVoci()" style="background:none;border:none;color:#e74c3c;font-size:20px;cursor:pointer;line-height:1;padding:0 4px;">×</button>
+            </div>
+            <div style="margin-bottom:8px;">
+              <label style="font-size:11px;font-weight:600;color:#777;text-transform:uppercase;display:block;margin-bottom:4px;">Descrizione</label>
+              <input type="text" value="${esc(v.desc)}"
+                style="width:100%;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:16px;font-family:inherit;outline:none;"
+                oninput="vociData[${i}].desc=this.value;formDirty=true"
+                onfocus="this.style.borderColor='#1a1a2e'" onblur="this.style.borderColor='#e0e0e0'" />
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+              <div>
+                <label style="font-size:11px;font-weight:600;color:#777;text-transform:uppercase;display:block;margin-bottom:4px;">Qtà</label>
+                <input type="number" value="${qty}" min="0" step="any" inputmode="decimal"
+                  style="width:100%;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:16px;font-family:inherit;outline:none;text-align:right;"
+                  oninput="vociData[${i}].qty=parseFloat(this.value)||0;formDirty=true;aggiornaVociTotali()"
+                  onfocus="this.style.borderColor='#1a1a2e'" onblur="this.style.borderColor='#e0e0e0'" />
+              </div>
+              <div>
+                <label style="font-size:11px;font-weight:600;color:#777;text-transform:uppercase;display:block;margin-bottom:4px;">U.M.</label>
+                <input type="text" value="${esc(v.um)}"
+                  style="width:100%;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:16px;font-family:inherit;outline:none;text-align:center;"
+                  oninput="vociData[${i}].um=this.value;formDirty=true"
+                  onfocus="this.style.borderColor='#1a1a2e'" onblur="this.style.borderColor='#e0e0e0'" />
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+              <div>
+                <label style="font-size:11px;font-weight:600;color:#777;text-transform:uppercase;display:block;margin-bottom:4px;">Prezzo €</label>
+                <input type="number" value="${prezzo}" min="0" step="any" inputmode="decimal"
+                  style="width:100%;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:16px;font-family:inherit;outline:none;text-align:right;"
+                  oninput="vociData[${i}].prezzo=parseFloat(this.value)||0;formDirty=true;aggiornaVociTotali()"
+                  onfocus="this.style.borderColor='#1a1a2e'" onblur="this.style.borderColor='#e0e0e0'" />
+              </div>
+              <div>
+                <label style="font-size:11px;font-weight:600;color:#777;text-transform:uppercase;display:block;margin-bottom:4px;">IVA</label>
+                <select onchange="vociData[${i}].iva=this.value==='bollo'?'bollo':parseFloat(this.value);formDirty=true;aggiornaVociTotali()"
+                  style="width:100%;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:16px;font-family:inherit;outline:none;background:#fff;">
+                  ${[0,4,5,10,22].map(r=>`<option value="${r}" ${v.iva==r?'selected':''}>${r}%</option>`).join('')}
+                  <option value="bollo" ${v.iva==='bollo'?'selected':''}>Bollo € 2,00</option>
+                </select>
+              </div>
+            </div>
+            <div style="text-align:right;font-size:14px;font-weight:700;color:#1a1a2e;">
+              Totale: ${isBollo ? '+ € 2,00 bollo' : '€ ' + fmt(tot)}
+            </div>
+          </div>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  } else {
+    // Layout tabella desktop
+    vociData.forEach((v, i) => {
+      const qty    = parseFloat(v.qty) || 0;
+      const prezzo = parseFloat(v.prezzo) || 0;
+      const isBollo = v.iva === 'bollo';
+      const ivaRate = isBollo ? 0 : (parseFloat(v.iva) || 0);
+      const tot    = qty * prezzo;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><input type="text" value="${esc(v.desc)}" oninput="vociData[${i}].desc=this.value;formDirty=true" /></td>
+        <td><input type="number" value="${qty}" min="0" step="any" oninput="vociData[${i}].qty=parseFloat(this.value)||0;formDirty=true;aggiornaVociTotali()" style="text-align:right;" /></td>
+        <td><input type="text" value="${esc(v.um)}" oninput="vociData[${i}].um=this.value;formDirty=true" style="text-align:center;" /></td>
+        <td><input type="number" value="${prezzo}" min="0" step="any" oninput="vociData[${i}].prezzo=parseFloat(this.value)||0;formDirty=true;aggiornaVociTotali()" style="text-align:right;" /></td>
+        <td>
+          <select onchange="vociData[${i}].iva=this.value==='bollo'?'bollo':parseFloat(this.value);formDirty=true;aggiornaVociTotali()">
+            ${[0,4,5,10,22].map(r=>`<option value="${r}" ${v.iva==r?'selected':''}>${r}%</option>`).join('')}
+            <option value="bollo" ${v.iva==='bollo'?'selected':''}>Marca da bollo (€ 2,00)</option>
+          </select>
+        </td>
+        <td class="td-totale" style="text-align:right;">${isBollo ? '(+ € 2,00 bollo)' : '€ ' + fmt(tot)}</td>
+        <td class="td-del"><button class="btn-del-row" onclick="vociData.splice(${i},1);formDirty=true;renderVoci()" title="Rimuovi">×</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+    // Righe vuote visive solo su desktop
+    const righeVuote = Math.max(0, 5 - vociData.length);
+    for (let e = 0; e < righeVuote; e++) {
+      const emptyTr = document.createElement('tr');
+      emptyTr.className = 'row-empty';
+      emptyTr.innerHTML = `<td></td><td></td><td></td><td></td><td></td><td></td><td></td>`;
+      tbody.appendChild(emptyTr);
+    }
+  }
+
+  aggiornaVociTotali();
 }
 
 // =========================================================
