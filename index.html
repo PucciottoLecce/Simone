@@ -480,47 +480,39 @@
 
 <script>
 // =========================================================
-// CONFIGURAZIONE TURSO
+// CONFIGURAZIONE WORKER
+// Sostituisci WORKER_URL con l'URL del tuo Cloudflare Worker
+// dopo il deploy (es. https://preventivi-pro-worker.<tuo-account>.workers.dev)
+// APP_SECRET deve corrispondere alla variabile d'ambiente impostata sul Worker
 // =========================================================
-const TURSO_URL  = 'https://preventivi-pro-joonior.aws-eu-west-1.turso.io';
-const TURSO_TOKEN = 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3ODE2MjkxMzUsImlkIjoiMDE5ZWQxNWItY2UwMS03Mzk0LTgxODctNTZmN2U0ZGNkOWViIiwicmlkIjoiMGQ4OWNjZWMtYTFlMC00MTMxLTg4MWItMTY3ODQzMmJkNTA2In0.-sqjLw-RQJn-9dRHVTIJ7oByV2stbhEvZGvWAr3q082BIyz_yxKjveqvDw7kA51smiB0kRbwZx9DXq7dPNl7Cg';
+const WORKER_URL  = 'https://preventivi-pro-worker.<tuo-account>.workers.dev';
+const APP_SECRET  = 'CAMBIA_CON_IL_TUO_SEGRETO';  // stessa stringa di env.APP_SECRET nel Worker
 
 // =========================================================
-// TURSO HTTP API
+// API CLIENT → Cloudflare Worker (che poi parla con Turso)
 // =========================================================
 async function tursoExec(sql, args = []) {
-  const res = await fetch(`${TURSO_URL}/v2/pipeline`, {
+  const res = await fetch(WORKER_URL, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${TURSO_TOKEN}`,
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      'X-App-Secret': APP_SECRET,
     },
-    body: JSON.stringify({
-      requests: [
-        { type: 'execute', stmt: { sql, args: args.map(v => {
-          if (v === null || v === undefined) return { type: 'null' };
-          if (typeof v === 'number') return { type: 'float', value: v };
-          return { type: 'text', value: String(v) };
-        })}},
-        { type: 'close' }
-      ]
-    })
+    body: JSON.stringify({ sql, args }),
   });
-  if (!res.ok) throw new Error(`Turso HTTP ${res.status}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+    throw new Error(err.error || `Worker HTTP ${res.status}`);
+  }
   const data = await res.json();
-  const result = data.results[0];
-  if (result.type === 'error') throw new Error(result.error.message);
-  return result.response.result;
+  if (data.error) throw new Error(data.error);
+  // Restituisce una struttura compatibile con il vecchio codice (tursoQuery usa .rows)
+  return data;
 }
 
 async function tursoQuery(sql, args = []) {
-  const result = await tursoExec(sql, args);
-  const cols = result.cols.map(c => c.name);
-  return result.rows.map(row => {
-    const obj = {};
-    cols.forEach((c, i) => { obj[c] = row[i]?.value ?? null; });
-    return obj;
-  });
+  const data = await tursoExec(sql, args);
+  return data.rows || [];
 }
 
 // =========================================================
@@ -742,10 +734,12 @@ function renderVoci() {
   vociData.forEach((v, i) => {
     const qty    = parseFloat(v.qty) || 0;
     const prezzo = parseFloat(v.prezzo) || 0;
-    const iva    = parseFloat(v.iva) || 0;
+    const iva    = (v.iva === 'bollo') ? 0 : (parseFloat(v.iva) || 0);
+    const isBollo = v.iva === 'bollo';
+    const ivaRate = isBollo ? 0 : (parseFloat(v.iva) || 0);
     const tot    = qty * prezzo;
     imponibile  += tot;
-    ivaTotal    += tot * iva / 100;
+    ivaTotal    += isBollo ? 2 : (tot * ivaRate / 100);
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td><input type="text" value="${esc(v.desc)}" oninput="vociData[${i}].desc=this.value;formDirty=true" /></td>
@@ -753,11 +747,12 @@ function renderVoci() {
       <td><input type="text" value="${esc(v.um)}" oninput="vociData[${i}].um=this.value;formDirty=true" style="text-align:center;" /></td>
       <td><input type="number" value="${prezzo}" min="0" step="any" oninput="vociData[${i}].prezzo=parseFloat(this.value)||0;formDirty=true;renderVoci()" style="text-align:right;" /></td>
       <td>
-        <select onchange="vociData[${i}].iva=parseFloat(this.value);formDirty=true;renderVoci()">
+        <select onchange="vociData[${i}].iva=this.value==='bollo'?'bollo':parseFloat(this.value);formDirty=true;renderVoci()">
           ${[0,4,5,10,22].map(r=>`<option value="${r}" ${v.iva==r?'selected':''}>${r}%</option>`).join('')}
+          <option value="bollo" ${v.iva==='bollo'?'selected':''}>Marca da bollo (€ 2,00)</option>
         </select>
       </td>
-      <td class="td-totale" style="text-align:right;">€ ${fmt(tot)}</td>
+      <td class="td-totale" style="text-align:right;">${isBollo ? '(+ € 2,00 bollo)' : '€ ' + fmt(tot)}</td>
       <td class="td-del"><button class="btn-del-row" onclick="vociData.splice(${i},1);formDirty=true;renderVoci()" title="Rimuovi">×</button></td>
     `;
     tbody.appendChild(tr);
@@ -789,7 +784,13 @@ async function resetNuovo(prev) {
   document.getElementById('prev-indirizzo-cliente').value = prev ? (prev.indirizzo_cliente||'') : '';
   document.getElementById('prev-citta-cliente').value = prev ? (prev.citta_cliente||'') : '';
   document.getElementById('prev-cap-cliente').value = prev ? (prev.cap_cliente||'') : '';
-  document.getElementById('prev-note').value = prev ? (prev.note||'') : '';
+  const NOTE_DEFAULT = `I lavori verranno eseguiti a regola d'arte e nel rispetto delle normative vigenti in materia edile e di sicurezza sul lavoro (D.Lgs. 81/2008 e s.m.i.).
+
+Regime fiscale: Operazione esente IVA ai sensi dell'art. 1, commi 54-89, Legge n. 190/2014 (Regime Forfettario). Non si applica la ritenuta d'acconto ai sensi dell'art. 1, c. 67, L. 190/2014.
+Il committente è tenuto al versamento dell'imposta di bollo di € 2,00 ai sensi del D.P.R. 642/1972 (per importi superiori a € 77,47).
+
+Modalità di pagamento: da concordare. Validità del preventivo: 30 giorni dalla data di emissione.`;
+  document.getElementById('prev-note').value = prev ? (prev.note||'') : NOTE_DEFAULT;
   document.getElementById('prev-stato').value = prev ? (prev.stato||'bozza') : 'bozza';
   // Pulisci errori validazione
   ['field-numero','field-cliente'].forEach(id => document.getElementById(id)?.classList.remove('error'));
@@ -827,7 +828,8 @@ async function salvaPreventivo() {
   vociData.forEach(v => {
     const tot = (parseFloat(v.qty)||0) * (parseFloat(v.prezzo)||0);
     imponibile += tot;
-    ivaTotal   += tot * (parseFloat(v.iva)||0) / 100;
+    if (v.iva === 'bollo') ivaTotal += 2;
+    else ivaTotal += tot * (parseFloat(v.iva)||0) / 100;
   });
   const p = {
     id: editId || Date.now().toString(),
@@ -1114,7 +1116,8 @@ function buildPrevCorrente(int) {
   let imponibile=0, ivaTotal=0;
   vociData.forEach(v=>{
     const tot=(parseFloat(v.qty)||0)*(parseFloat(v.prezzo)||0);
-    imponibile+=tot; ivaTotal+=tot*(parseFloat(v.iva)||0)/100;
+    imponibile+=tot;
+    if (v.iva==='bollo') ivaTotal+=2; else ivaTotal+=tot*(parseFloat(v.iva)||0)/100;
   });
   return {
     numero: document.getElementById('prev-numero').value,
