@@ -208,6 +208,102 @@
     .preview-topbar { display: none !important; }
     .preview-body { overflow: visible; }
   }
+
+  /* ===================== MOBILE ===================== */
+  @media (max-width: 640px) {
+    /* Nav: bottom bar su mobile */
+    .tabs {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      top: auto;
+      padding: 0;
+      border-top: 1.5px solid #ebebeb;
+      border-bottom: none;
+      z-index: 100;
+      background: #fff;
+      justify-content: space-around;
+      box-shadow: 0 -2px 12px rgba(0,0,0,0.08);
+    }
+    .tab {
+      flex: 1;
+      padding: 10px 4px 8px;
+      font-size: 10px;
+      text-align: center;
+      border-bottom: none;
+      border-top: 2.5px solid transparent;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      line-height: 1.2;
+    }
+    .tab.active {
+      border-bottom: none;
+      border-top-color: #1a1a2e;
+      color: #1a1a2e;
+    }
+
+    /* Header banner */
+    .banner { padding: 12px 16px; flex-direction: column; gap: 8px; }
+    .banner-info { gap: 8px; }
+    .banner-logo { width: 36px; height: 36px; font-size: 15px; }
+    .btn-banner-edit { font-size: 11px; padding: 5px 10px; }
+
+    /* Main content */
+    .main-content {
+      padding: 16px;
+      padding-bottom: 80px; /* spazio per bottom nav */
+      max-width: 100%;
+    }
+
+    /* Form grid: tutto a colonna singola */
+    .form-grid { grid-template-columns: 1fr !important; gap: 12px; }
+
+    /* Tabella voci preventivo: scroll orizzontale */
+    .voci-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .voci-table { min-width: 600px; }
+
+    /* Lista preventivi */
+    .prev-list-item { flex-wrap: wrap; gap: 8px; padding: 12px; }
+    .prev-list-meta { flex: 1 1 100%; min-width: unset; }
+    .prev-list-totale { font-size: 15px; }
+
+    /* Bottoni */
+    .btn { padding: 10px 16px; font-size: 13px; }
+    .btn-group { flex-wrap: wrap; gap: 8px; }
+
+    /* Totali */
+    .totali-box { flex-direction: column; }
+    .totali-inner { min-width: unset; width: 100%; }
+
+    /* Preview overlay */
+    .preview-box { width: 100%; max-width: 100%; border-radius: 0; max-height: 100vh; }
+
+    /* Login card */
+    .login-card { width: 90vw; padding: 32px 24px; }
+
+    /* Search bar */
+    .search-bar { flex-direction: column; gap: 8px; }
+    .search-bar input { min-width: unset; }
+
+    /* Dashboard cards */
+    .dash-cards { grid-template-columns: 1fr 1fr !important; gap: 10px; }
+    .dash-card { padding: 14px; }
+    .dash-val { font-size: 22px; }
+
+    /* Scadenzario */
+    .scad-item { flex-wrap: wrap; gap: 8px; }
+
+    /* Section title */
+    .section-title { font-size: 15px; }
+
+    /* Input/select più grandi per touch */
+    .field input, .field textarea, .field select,
+    .voci-table td input, .voci-table td select {
+      font-size: 16px !important; /* previene zoom automatico iOS */
+      padding: 11px 13px;
+    }
+  }
 </style>
 </head>
 <body>
@@ -485,8 +581,8 @@
 // dopo il deploy (es. https://preventivi-pro-worker.<tuo-account>.workers.dev)
 // APP_SECRET deve corrispondere alla variabile d'ambiente impostata sul Worker
 // =========================================================
-const WORKER_URL  = 'https://simone.pucciottolecce.workers.dev';
-const APP_SECRET  = '123456789';  // stessa stringa di env.APP_SECRET nel Worker
+const WORKER_URL  = 'https://preventivi-pro-worker.<tuo-account>.workers.dev';
+const APP_SECRET  = 'CAMBIA_CON_IL_TUO_SEGRETO';  // stessa stringa di env.APP_SECRET nel Worker
 
 // =========================================================
 // API CLIENT → Cloudflare Worker (che poi parla con Turso)
@@ -563,9 +659,19 @@ async function initDB() {
 }
 
 // =========================================================
-// STATO SESSIONE (solo in memoria, nessun localStorage)
+// STATO SESSIONE (con localStorage per persistenza)
 // =========================================================
 let currentUser = null;
+
+function salvaSessione(user) {
+  try { localStorage.setItem('pp_session', JSON.stringify(user)); } catch(e) {}
+}
+function leggiSessione() {
+  try { return JSON.parse(localStorage.getItem('pp_session')); } catch(e) { return null; }
+}
+function cancellaSessione() {
+  try { localStorage.removeItem('pp_session'); } catch(e) {}
+}
 let intestazioneCache = {};
 let preventiviCache = [];
 let formDirty = false; // traccia modifiche non salvate
@@ -584,6 +690,7 @@ async function doLogin() {
     const rows = await tursoQuery('SELECT * FROM utenti WHERE username=? AND password=?', [u, p]);
     if (rows.length > 0) {
       currentUser = rows[0];
+      salvaSessione(currentUser);
       document.getElementById('login-screen').style.display = 'none';
       document.getElementById('app').style.display = 'block';
       await caricaIntestazione();
@@ -601,6 +708,7 @@ async function doLogin() {
 function doLogout() {
   currentUser = null;
   formDirty = false;
+  cancellaSessione();
   document.getElementById('app').style.display = 'none';
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('login-user').value = '';
@@ -1325,7 +1433,28 @@ function notifyErr(txt) {
     return;
   }
   document.getElementById('global-loader').style.display = 'none';
-  document.getElementById('login-screen').style.display  = 'flex';
+
+  // Controlla sessione salvata
+  const sessione = leggiSessione();
+  if (sessione && sessione.id) {
+    // Verifica che l'utente esista ancora nel DB
+    try {
+      const rows = await tursoQuery('SELECT * FROM utenti WHERE id=?', [sessione.id]);
+      if (rows.length > 0) {
+        currentUser = rows[0];
+        salvaSessione(currentUser); // aggiorna con dati freschi
+        document.getElementById('login-screen').style.display = 'none';
+        document.getElementById('app').style.display = 'block';
+        await caricaIntestazione();
+        caricaImpostazioni();
+        showTab('dashboard');
+        return;
+      }
+    } catch(e) { /* sessione non valida, vai al login */ }
+    cancellaSessione();
+  }
+
+  document.getElementById('login-screen').style.display = 'flex';
 })();
 </script>
 </body>
