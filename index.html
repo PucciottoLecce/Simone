@@ -892,11 +892,14 @@ function aggiornaVociTotali() {
   const ivaVal = (document.getElementById('iva-globale')||{}).value || '22';
   const isBollo = ivaVal === 'bollo';
   const ivaRate = isBollo ? 0 : (parseFloat(ivaVal) || 0);
-  vociData.forEach(v => {
+  vociData.forEach((v, i) => {
     const qty = parseFloat(v.qty) || 0;
     const prezzo = parseFloat(v.prezzo) || 0;
     const tot = qty * prezzo;
     imponibile += tot;
+    // Aggiorna il totale nella card mobile se esiste
+    const el = document.getElementById('tot-voce-' + i);
+    if (el) el.textContent = 'Totale: € ' + fmt(tot);
   });
   ivaTotal = isBollo ? 2 : (imponibile * ivaRate / 100);
   document.getElementById('tot-imponibile').textContent = '€ ' + fmt(imponibile);
@@ -956,7 +959,7 @@ function renderVoci() {
                   onfocus="this.style.borderColor='#1a1a2e'" onblur="this.style.borderColor='#e0e0e0'" />
               </div>
               <div style="display:flex;flex-direction:column;justify-content:flex-end;">
-                <div style="text-align:right;font-size:14px;font-weight:700;color:#1a1a2e;padding:10px 0;">
+                <div id="tot-voce-${i}" style="text-align:right;font-size:14px;font-weight:700;color:#1a1a2e;padding:10px 0;">
                   Totale: € ${fmt(tot)}
                 </div>
               </div>
