@@ -1,0 +1,21 @@
+name = "preventivi-pro-worker"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+# Le variabili SENSIBILI (TURSO_TOKEN, APP_SECRET) vanno impostate
+# tramite Cloudflare Dashboard > Workers > Settings > Variables
+# oppure con: wrangler secret put TURSO_TOKEN
+#
+# keep_bindings = true impedisce a wrangler deploy di cancellare
+# i secrets e le variabili già configurate sul dashboard Cloudflare.
+# In questo modo TURSO_TOKEN e APP_SECRET sopravvivono ad ogni deploy.
+keep_bindings = true
+
+# TURSO_URL può stare qui se non è sensibile, o anche come secret.
+[vars]
+TURSO_URL = "https://preventivi-pro-joonior.aws-eu-west-1.turso.io"
+
+# Non mettere TURSO_TOKEN e APP_SECRET qui — usare wrangler secret!
+# Dopo il primo: wrangler secret put TURSO_TOKEN
+#                wrangler secret put APP_SECRET
+# I secrets verranno mantenuti ad ogni deploy grazie a keep_bindings = true
