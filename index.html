@@ -1158,14 +1158,17 @@ async function renderLista() {
 
 async function loadPreventivi() {
   const rows = await tursoQuery('SELECT * FROM preventivi ORDER BY created_at DESC');
-  return rows.map(r => ({
-    ...r,
-    voci: (() => { const r = parseVociRaw(r.voci); return r.items; })(),
-    ivaGlobale: (() => { return parseVociRaw(r.voci).ivaGlobale; })(),
-    totale: parseFloat(r.totale)||0,
-    imponibile: parseFloat(r.imponibile)||0,
-    ivaTotal: parseFloat(r.iva_total)||0
-  }));
+  return rows.map(r => {
+    const parsed = parseVociRaw(r.voci);
+    return {
+      ...r,
+      voci: parsed.items,
+      ivaGlobale: parsed.ivaGlobale,
+      totale: parseFloat(r.totale) || 0,
+      imponibile: parseFloat(r.imponibile) || 0,
+      ivaTotal: parseFloat(r.iva_total) || 0
+    };
+  });
 }
 
 async function modificaPreventivo(id) {
