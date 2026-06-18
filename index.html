@@ -1,0 +1,1604 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Preventivi Pro</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f5f5f0; color: #1a1a1a; min-height: 100vh; }
+
+  /* LOADER */
+  #global-loader {
+    position: fixed; inset: 0; background: #1a1a2e;
+    display: flex; align-items: center; justify-content: center;
+    z-index: 9999; flex-direction: column; gap: 16px;
+  }
+  #global-loader p { color: #fff; font-size: 14px; opacity: 0.7; }
+  .spinner {
+    width: 36px; height: 36px;
+    border: 3px solid rgba(255,255,255,0.2);
+    border-top-color: #e8c84a;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* LOGIN */
+  #login-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #1a1a2e; }
+  .login-card { background: #fff; border-radius: 16px; padding: 48px 40px; width: 360px; box-shadow: 0 8px 40px rgba(0,0,0,0.18); }
+  .login-logo { text-align: center; margin-bottom: 32px; }
+  .login-logo h1 { font-size: 22px; font-weight: 700; color: #1a1a2e; letter-spacing: -0.5px; }
+  .login-logo p { font-size: 13px; color: #888; margin-top: 4px; }
+  .login-card label { display: block; font-size: 12px; font-weight: 600; color: #555; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .login-card input { width: 100%; padding: 10px 14px; border: 1.5px solid #e0e0e0; border-radius: 8px; font-size: 15px; margin-bottom: 16px; transition: border-color 0.2s; outline: none; }
+  .login-card input:focus { border-color: #1a1a2e; }
+  .btn-login { width: 100%; padding: 12px; background: #1a1a2e; color: #fff; border: none; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+  .btn-login:hover { background: #2d2d52; }
+  .btn-login:disabled { opacity: 0.6; cursor: not-allowed; }
+  .login-error { color: #c0392b; font-size: 13px; margin-top: 10px; text-align: center; display: none; }
+
+  /* APP */
+  #app { display: none; }
+  .topbar { background: #1a1a2e; color: #fff; padding: 0 32px; height: 58px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+  .topbar-title { font-size: 17px; font-weight: 700; letter-spacing: -0.3px; }
+  .topbar-actions { display: flex; gap: 12px; align-items: center; }
+  .btn-sm { padding: 7px 16px; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer; border: none; transition: opacity 0.2s; }
+  .btn-sm:hover { opacity: 0.85; }
+  .btn-sm:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-primary { background: #e8c84a; color: #1a1a2e; }
+  .btn-ghost { background: rgba(255,255,255,0.12); color: #fff; }
+  .btn-danger { background: #c0392b; color: #fff; }
+  .btn-success { background: #27ae60; color: #fff; }
+
+  /* TABS */
+  .tabs { background: #fff; border-bottom: 1.5px solid #ebebeb; padding: 0 32px; display: flex; gap: 0; }
+  .tab { padding: 14px 22px; font-size: 14px; font-weight: 600; color: #888; cursor: pointer; border-bottom: 2.5px solid transparent; transition: all 0.2s; }
+  .tab.active { color: #1a1a2e; border-bottom-color: #1a1a2e; }
+  .tab:hover:not(.active) { color: #444; }
+
+  .main-content { padding: 28px 32px; max-width: 960px; margin: 0 auto; }
+
+  .section-title { font-size: 16px; font-weight: 700; color: #1a1a2e; margin-bottom: 18px; padding-bottom: 10px; border-bottom: 1.5px solid #ebebeb; }
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+  .form-grid.col3 { grid-template-columns: 1fr 1fr 1fr; }
+  .form-grid.col1 { grid-template-columns: 1fr; }
+  .field label { display: block; font-size: 12px; font-weight: 600; color: #777; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .field input, .field textarea, .field select { width: 100%; padding: 9px 13px; border: 1.5px solid #e0e0e0; border-radius: 8px; font-size: 14px; font-family: inherit; outline: none; transition: border-color 0.2s; background: #fff; }
+  .field input:focus, .field textarea:focus, .field select:focus { border-color: #1a1a2e; }
+  .field textarea { resize: vertical; min-height: 72px; }
+  .field.error input, .field.error textarea, .field.error select { border-color: #c0392b; }
+  .field .field-err { font-size: 11px; color: #c0392b; margin-top: 4px; display: none; }
+  .field.error .field-err { display: block; }
+
+  .card { background: #fff; border-radius: 12px; border: 1.5px solid #ebebeb; padding: 24px; margin-bottom: 24px; }
+
+  /* NUMERO */
+  .num-row { display: flex; gap: 10px; align-items: flex-end; }
+  .num-row .field { flex: 1; }
+  .btn-regen { padding: 9px 14px; background: #f0f0f0; border: 1.5px solid #e0e0e0; border-radius: 8px; font-size: 13px; cursor: pointer; font-weight: 600; white-space: nowrap; height: 40px; }
+  .btn-regen:hover { background: #e8e8e8; }
+
+  /* VOCI */
+  .voci-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+  .voci-table th { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #888; padding: 8px 10px; text-align: left; border-bottom: 1.5px solid #ebebeb; }
+  .voci-table td { padding: 6px 8px; vertical-align: middle; border-bottom: 1px solid #f0f0f0; }
+  .voci-table tbody tr:last-child td { border-bottom: none; }
+  .voci-table .row-empty td { height: 38px; border-bottom: 1px solid #f0f0f0; background: repeating-linear-gradient(90deg,transparent,transparent 6px,#f5f5f5 6px,#f5f5f5 7px); opacity: 0.5; }
+  .voci-table .row-empty:last-child td { border-bottom: none; }
+  .voci-table td input, .voci-table td select { width: 100%; padding: 7px 9px; border: 1.5px solid #e0e0e0; border-radius: 6px; font-size: 13px; outline: none; font-family: inherit; }
+  .voci-table td input:focus, .voci-table td select:focus { border-color: #1a1a2e; }
+  .voci-table .td-del { width: 36px; text-align: center; }
+  .btn-del-row { background: none; border: none; color: #c0392b; font-size: 18px; cursor: pointer; line-height: 1; padding: 0; }
+  .td-totale { font-weight: 700; font-size: 14px; color: #1a1a2e; }
+
+  .totali-box { display: flex; justify-content: flex-end; margin-top: 8px; }
+  .totali-inner { min-width: 260px; }
+  .totali-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 14px; color: #555; border-bottom: 1px solid #f0f0f0; }
+  .totali-row.grand { font-size: 17px; font-weight: 700; color: #1a1a2e; border-bottom: none; padding-top: 10px; }
+
+  .action-bar { display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px; }
+  .btn-large { padding: 11px 28px; border-radius: 9px; font-size: 15px; font-weight: 700; cursor: pointer; border: none; transition: opacity 0.2s; }
+  .btn-large:hover { opacity: 0.88; }
+  .btn-large:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* LISTA */
+  .prev-list-item { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; background: #fff; border: 1.5px solid #ebebeb; border-radius: 10px; margin-bottom: 10px; gap: 16px; flex-wrap: wrap; }
+  .prev-list-meta { flex: 1; min-width: 180px; }
+  .prev-list-num { font-size: 15px; font-weight: 700; color: #1a1a2e; }
+  .prev-list-cliente { font-size: 13px; color: #666; margin-top: 2px; }
+  .prev-list-data { font-size: 13px; color: #999; }
+  .prev-list-totale { font-size: 16px; font-weight: 700; color: #1a1a2e; min-width: 90px; text-align: right; }
+  .prev-list-actions { display: flex; gap: 8px; }
+  .badge-stato { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; }
+  .badge-bozza { background: #f0f0f0; color: #888; }
+  .badge-inviato { background: #d4edff; color: #1565c0; }
+  .badge-accettato { background: #d4f7e7; color: #1b7a4a; }
+  .badge-rifiutato { background: #fde8e8; color: #c0392b; }
+
+  /* ANTEPRIMA */
+  .preview-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 200; display: none; align-items: center; justify-content: center; }
+  .preview-overlay.open { display: flex; }
+  .preview-box { background: #fff; width: 860px; max-width: 96vw; max-height: 90vh; border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; }
+  .preview-topbar { padding: 14px 24px; background: #1a1a2e; display: flex; justify-content: space-between; align-items: center; }
+  .preview-topbar span { color: #fff; font-weight: 700; font-size: 15px; }
+  .preview-body { overflow: auto; flex: 1; padding: 0; }
+  .preventivo-doc { padding: 48px 56px; font-family: 'Segoe UI', sans-serif; color: #222; min-height: 700px; }
+  .doc-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 40px; padding-bottom: 24px; border-bottom: 3px solid #1a1a2e; }
+  .doc-logo-area h2 { font-size: 22px; font-weight: 800; color: #1a1a2e; letter-spacing: -0.5px; }
+  .doc-logo-area p { font-size: 12px; color: #666; line-height: 1.7; }
+  .doc-info { text-align: right; }
+  .doc-info .num { font-size: 26px; font-weight: 800; color: #1a1a2e; }
+  .doc-info .data { font-size: 12px; color: #888; margin-top: 4px; }
+  .doc-destinatario { margin-bottom: 32px; }
+  .doc-destinatario h4 { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #aaa; margin-bottom: 8px; }
+  .doc-destinatario p { font-size: 14px; color: #222; line-height: 1.7; font-weight: 500; }
+  .doc-table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+  .doc-table th { background: #1a1a2e; color: #fff; padding: 10px 12px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; text-align: left; }
+  .doc-table td { padding: 10px 12px; font-size: 13px; border-bottom: 1px solid #f0f0f0; }
+  .doc-table tr:last-child td { border-bottom: none; }
+  .doc-totali { display: flex; justify-content: flex-end; }
+  .doc-totali-inner { min-width: 240px; }
+  .doc-tot-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; color: #555; }
+  .doc-tot-row.grand { font-size: 17px; font-weight: 800; color: #1a1a2e; padding-top: 10px; border-top: 2px solid #1a1a2e; margin-top: 4px; }
+  .doc-note { margin-top: 32px; font-size: 12px; color: #888; border-top: 1px solid #f0f0f0; padding-top: 16px; }
+  .doc-footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid #e0e0e0; display: flex; justify-content: space-between; font-size: 10px; color: #bbb; }
+  .empty-list { text-align: center; padding: 48px 0; color: #bbb; font-size: 15px; }
+
+  /* COMPANY BANNER */
+  .company-banner { background: #f0efe8; border-bottom: 1.5px solid #e0e0d8; padding: 7px 32px; display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; color: #555; }
+  .company-banner-inner { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: 1; overflow: hidden; }
+  .company-name { font-weight: 700; color: #1a1a2e; }
+  .company-sep { color: #ccc; }
+  .btn-banner-edit { background: none; border: 1.5px solid #ccc; border-radius: 7px; padding: 4px 12px; font-size: 12px; font-weight: 600; cursor: pointer; color: #666; white-space: nowrap; transition: background 0.2s; }
+  .btn-banner-edit:hover { background: #e8e8e0; }
+
+  /* NOTIFICATION */
+  .notification { position: fixed; top: 70px; right: 24px; background: #1a1a2e; color: #fff; padding: 12px 22px; border-radius: 9px; font-size: 14px; font-weight: 600; z-index: 300; opacity: 0; transform: translateY(-12px); transition: all 0.3s; pointer-events: none; }
+  .notification.show { opacity: 1; transform: translateY(0); }
+  .notification.error { background: #c0392b; }
+
+  /* DASHBOARD */
+  .dash-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px; }
+  .dash-card { background: #fff; border: 1.5px solid #ebebeb; border-radius: 12px; padding: 20px 22px; display: flex; flex-direction: column; gap: 6px; }
+  .dash-card .label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #999; }
+  .dash-card .value { font-size: 26px; font-weight: 800; color: #1a1a2e; }
+  .dash-card .sub { font-size: 12px; color: #aaa; }
+  .dash-card.green { border-color: #27ae60; background: #f0fdf4; }
+  .dash-card.green .value { color: #27ae60; }
+  .dash-card.yellow { border-color: #e8c84a; background: #fefce8; }
+  .dash-card.yellow .value { color: #b8960a; }
+  .dash-card.red { border-color: #e74c3c; background: #fef2f2; }
+  .dash-card.red .value { color: #e74c3c; }
+  .dash-card.blue { border-color: #3498db; background: #eff6ff; }
+  .dash-card.blue .value { color: #1d6fa4; }
+
+  /* SEARCH */
+  .search-bar { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+  .search-bar input { flex: 1; min-width: 180px; padding: 9px 14px; border: 1.5px solid #e0e0e0; border-radius: 8px; font-size: 14px; font-family: inherit; outline: none; }
+  .search-bar input:focus { border-color: #1a1a2e; }
+  .search-bar select { padding: 9px 12px; border: 1.5px solid #e0e0e0; border-radius: 8px; font-size: 13px; font-family: inherit; outline: none; background: #fff; }
+  .search-bar select:focus { border-color: #1a1a2e; }
+
+  /* SCADENZARIO */
+  .scad-item { display: flex; align-items: center; gap: 14px; padding: 13px 18px; background: #fff; border: 1.5px solid #ebebeb; border-radius: 10px; margin-bottom: 8px; }
+  .scad-item.scaduto { border-color: #e74c3c; background: #fff5f5; }
+  .scad-item.in-scadenza { border-color: #e8c84a; background: #fffbea; }
+  .scad-days { font-size: 22px; font-weight: 800; min-width: 54px; text-align: center; line-height: 1; }
+  .scad-days.neg { color: #e74c3c; }
+  .scad-days.warn { color: #b8960a; }
+  .scad-days.ok { color: #27ae60; }
+  .scad-info { flex: 1; }
+  .scad-info .num { font-size: 14px; font-weight: 700; color: #1a1a2e; }
+  .scad-info .cliente { font-size: 13px; color: #666; }
+  .scad-info .date { font-size: 12px; color: #aaa; }
+  .scad-totale { font-size: 15px; font-weight: 700; color: #1a1a2e; text-align: right; }
+
+  /* SKELETON LOADER */
+  .skeleton { background: linear-gradient(90deg, #f0f0f0 25%, #e8e8e8 50%, #f0f0f0 75%); background-size: 200% 100%; animation: shimmer 1.2s infinite; border-radius: 6px; }
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+  .skel-row { height: 64px; margin-bottom: 10px; border-radius: 10px; }
+
+  @media print {
+    body > *:not(#preview-overlay) { display: none !important; }
+    .preview-overlay { position: static !important; background: none !important; display: block !important; }
+    .preview-box { box-shadow: none; border-radius: 0; max-height: none; overflow: visible; }
+    .preview-topbar { display: none !important; }
+    .preview-body { overflow: visible; }
+  }
+
+  /* ===================== MOBILE ===================== */
+  @media (max-width: 640px) {
+    /* Nav: bottom bar su mobile */
+    .tabs {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      top: auto;
+      padding: 0;
+      border-top: 1.5px solid #ebebeb;
+      border-bottom: none;
+      z-index: 100;
+      background: #fff;
+      justify-content: space-around;
+      box-shadow: 0 -2px 12px rgba(0,0,0,0.08);
+    }
+    .tab {
+      flex: 1;
+      padding: 10px 4px 8px;
+      font-size: 10px;
+      text-align: center;
+      border-bottom: none;
+      border-top: 2.5px solid transparent;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      line-height: 1.2;
+    }
+    .tab.active {
+      border-bottom: none;
+      border-top-color: #1a1a2e;
+      color: #1a1a2e;
+    }
+
+    /* Header banner */
+    .banner { padding: 12px 16px; flex-direction: column; gap: 8px; }
+    .banner-info { gap: 8px; }
+    .banner-logo { width: 36px; height: 36px; font-size: 15px; }
+    .btn-banner-edit { font-size: 11px; padding: 5px 10px; }
+
+    /* Main content */
+    .main-content {
+      padding: 16px;
+      padding-bottom: 80px; /* spazio per bottom nav */
+      max-width: 100%;
+    }
+
+    /* Form grid: tutto a colonna singola */
+    .form-grid { grid-template-columns: 1fr !important; gap: 12px; }
+
+    /* Tabella voci preventivo: no scroll, layout compatto */
+    .voci-table-wrap { overflow-x: visible; }
+    .voci-table { min-width: unset; width: 100%; }
+    .voci-table thead { display: none; }
+    .voci-table tbody tr { display: block; background: #fff; border: 1.5px solid #ebebeb; border-radius: 10px; margin-bottom: 10px; padding: 12px; }
+    .voci-table tbody tr td { display: block; border: none; padding: 4px 0; }
+    .voci-table .row-empty { display: none; }
+
+    /* Lista preventivi */
+    .prev-list-item { flex-wrap: wrap; gap: 8px; padding: 12px; }
+    .prev-list-meta { flex: 1 1 100%; min-width: unset; }
+    .prev-list-totale { font-size: 15px; }
+
+    /* Bottoni */
+    .btn { padding: 10px 16px; font-size: 13px; }
+    .btn-group { flex-wrap: wrap; gap: 8px; }
+
+    /* Totali */
+    .totali-box { flex-direction: column; }
+    .totali-inner { min-width: unset; width: 100%; }
+
+    /* Preview overlay */
+    .preview-box { width: 100%; max-width: 100%; border-radius: 0; max-height: 100vh; }
+
+    /* Login card */
+    .login-card { width: 90vw; padding: 32px 24px; }
+
+    /* Search bar */
+    .search-bar { flex-direction: column; gap: 8px; }
+    .search-bar input { min-width: unset; }
+
+    /* Dashboard cards */
+    .dash-cards { grid-template-columns: 1fr 1fr !important; gap: 10px; }
+    .dash-card { padding: 14px; }
+    .dash-val { font-size: 22px; }
+
+    /* Scadenzario */
+    .scad-item { flex-wrap: wrap; gap: 8px; }
+
+    /* Section title */
+    .section-title { font-size: 15px; }
+
+    /* Input/select più grandi per touch */
+    .field input, .field textarea, .field select,
+    .voci-table td input, .voci-table td select {
+      font-size: 16px !important; /* previene zoom automatico iOS */
+      padding: 11px 13px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<!-- LOADER INIZIALE -->
+<div id="global-loader">
+  <div class="spinner"></div>
+  <p>Connessione al database…</p>
+</div>
+
+<!-- LOGIN -->
+<div id="login-screen" style="display:none;">
+  <div class="login-card">
+    <div class="login-logo">
+      <h1>📄 Preventivi Pro</h1>
+      <p>Gestione preventivi professionale</p>
+    </div>
+    <label>Nome utente</label>
+    <input type="text" id="login-user" placeholder="utente" />
+    <label>Password</label>
+    <input type="password" id="login-pass" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()" />
+    <button class="btn-login" onclick="doLogin()" id="btn-login-submit">Accedi</button>
+    <p class="login-error" id="login-err">Credenziali errate. Riprova.</p>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div class="topbar">
+    <span class="topbar-title">📄 Preventivi Pro</span>
+    <div class="topbar-actions">
+      <button class="btn-sm btn-primary" onclick="nuovoPreventivo()">+ Nuovo preventivo</button>
+      <button class="btn-sm btn-ghost" onclick="doLogout()">Esci</button>
+    </div>
+  </div>
+
+  <div class="company-banner" id="company-banner">
+    <div class="company-banner-inner" id="company-banner-inner"></div>
+    <button class="btn-banner-edit" onclick="showTab('intestazione')">✏️ Modifica</button>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" id="tab-dashboard" onclick="showTab('dashboard')">📊 Dashboard</div>
+    <div class="tab" id="tab-lista" onclick="showTab('lista')">📋 Preventivi</div>
+    <div class="tab" id="tab-nuovo" onclick="nuovoPreventivo()">+ Nuovo</div>
+    <div class="tab" id="tab-scadenzario" onclick="showTab('scadenzario')">⏰ Scadenzario</div>
+    <div class="tab" id="tab-intestazione" onclick="showTab('intestazione')">🏢 Intestazione</div>
+    <div class="tab" id="tab-impostazioni" onclick="showTab('impostazioni')">⚙️ Impostazioni</div>
+  </div>
+
+  <div class="main-content">
+
+    <!-- DASHBOARD -->
+    <div id="section-dashboard">
+      <div class="section-title">Dashboard</div>
+      <div class="dash-grid" id="dash-grid"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+        <div class="card">
+          <div class="section-title" style="margin-bottom:14px;">Ultimi preventivi</div>
+          <div id="dash-ultimi"></div>
+        </div>
+        <div class="card">
+          <div class="section-title" style="margin-bottom:14px;">Distribuzione stati</div>
+          <div id="dash-stati"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LISTA -->
+    <div id="section-lista" style="display:none;">
+      <div class="section-title">Preventivi salvati</div>
+      <div class="search-bar">
+        <input type="text" id="search-input" placeholder="🔍  Cerca per cliente o numero…" oninput="renderLista()" />
+        <select id="filter-stato" onchange="renderLista()">
+          <option value="">Tutti gli stati</option>
+          <option value="bozza">Bozza</option>
+          <option value="inviato">Inviato</option>
+          <option value="accettato">Accettato</option>
+          <option value="rifiutato">Rifiutato</option>
+        </select>
+        <select id="sort-by" onchange="renderLista()">
+          <option value="data-desc">Data ↓</option>
+          <option value="data-asc">Data ↑</option>
+          <option value="totale-desc">Importo ↓</option>
+          <option value="totale-asc">Importo ↑</option>
+          <option value="cliente-asc">Cliente A→Z</option>
+        </select>
+      </div>
+      <div id="lista-preventivi"></div>
+    </div>
+
+    <!-- SCADENZARIO -->
+    <div id="section-scadenzario" style="display:none;">
+      <div class="section-title">Scadenzario preventivi</div>
+      <p style="font-size:13px;color:#888;margin-bottom:20px;">Preventivi inviati con data di validità in evidenza. Scaduti in rosso, in scadenza entro 7 giorni in giallo.</p>
+      <div id="scad-list"></div>
+    </div>
+
+    <!-- NUOVO / MODIFICA -->
+    <div id="section-nuovo" style="display:none;">
+      <div class="section-title" id="nuovo-title">Nuovo preventivo</div>
+
+      <div class="card">
+        <div class="form-grid col3">
+          <div class="field" id="field-numero">
+            <label>Numero preventivo</label>
+            <div class="num-row">
+              <div class="field" style="margin:0">
+                <input type="text" id="prev-numero" placeholder="es. PREV-001" />
+              </div>
+              <button class="btn-regen" onclick="generaNumero()" title="Genera numero automatico">⟳ Auto</button>
+            </div>
+            <span class="field-err">Il numero preventivo è obbligatorio</span>
+          </div>
+          <div class="field">
+            <label>Data</label>
+            <input type="date" id="prev-data" />
+          </div>
+          <div class="field">
+            <label>Validità (giorni)</label>
+            <input type="number" id="prev-validita" value="30" min="1" />
+          </div>
+        </div>
+        <div class="form-grid">
+          <div class="field" id="field-cliente">
+            <label>Ragione sociale cliente</label>
+            <input type="text" id="prev-cliente" placeholder="Nome cliente / azienda" />
+            <span class="field-err">Il cliente è obbligatorio</span>
+          </div>
+          <div class="field">
+            <label>P.IVA / C.F. cliente</label>
+            <input type="text" id="prev-piva-cliente" placeholder="IT12345678901" />
+          </div>
+        </div>
+        <div class="form-grid">
+          <div class="field">
+            <label>Email cliente</label>
+            <input type="email" id="prev-email-cliente" placeholder="cliente@esempio.it" />
+          </div>
+          <div class="field">
+            <label>Codice univoco / SDI</label>
+            <input type="text" id="prev-sdi-cliente" placeholder="es. ABCDEFG oppure PEC" />
+          </div>
+        </div>
+        <div class="form-grid col3">
+          <div class="field">
+            <label>Indirizzo cliente</label>
+            <input type="text" id="prev-indirizzo-cliente" placeholder="Via, numero civico" />
+          </div>
+          <div class="field">
+            <label>Città</label>
+            <input type="text" id="prev-citta-cliente" placeholder="Città" />
+          </div>
+          <div class="field">
+            <label>CAP</label>
+            <input type="text" id="prev-cap-cliente" placeholder="00000" />
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-title" style="margin-bottom:16px;">Voci del preventivo</div>
+        <table class="voci-table">
+          <thead>
+            <tr>
+              <th style="width:42%">Descrizione</th>
+              <th style="width:10%">Qtà</th>
+              <th style="width:12%">U.M.</th>
+              <th style="width:18%">Prezzo unit.</th>
+              <th style="width:14%">Totale</th>
+              <th class="td-del"></th>
+            </tr>
+          </thead>
+          <tbody id="voci-body"></tbody>
+        </table>
+        <button onclick="addVoce()" style="background:none;border:1.5px dashed #ccc;border-radius:8px;padding:8px 18px;color:#888;font-size:13px;cursor:pointer;font-weight:600;margin-bottom:16px;">+ Aggiungi voce</button>
+        <div class="totali-box">
+          <div class="totali-inner">
+            <div class="totali-row" style="margin-bottom:10px;">
+              <span style="font-weight:600;color:#555;">IVA</span>
+              <select id="iva-globale" onchange="aggiornaVociTotali()" style="padding:6px 10px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:14px;font-family:inherit;background:#fff;color:#1a1a2e;font-weight:600;cursor:pointer;">
+                <option value="0">0% (Esente / Forfettario)</option>
+                <option value="4">4%</option>
+                <option value="5">5%</option>
+                <option value="10">10%</option>
+                <option value="22" selected>22%</option>
+                <option value="bollo">Marca da bollo (€ 2,00)</option>
+              </select>
+            </div>
+            <div class="totali-row"><span>Imponibile</span><span id="tot-imponibile">€ 0,00</span></div>
+            <div class="totali-row"><span>IVA</span><span id="tot-iva">€ 0,00</span></div>
+            <div class="totali-row grand"><span>TOTALE</span><span id="tot-totale">€ 0,00</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="form-grid col1">
+          <div class="field">
+            <label>Note / Condizioni</label>
+            <textarea id="prev-note" rows="3" placeholder="Modalità di pagamento, tempistiche, note aggiuntive…"></textarea>
+          </div>
+          <div class="field">
+            <label>Stato preventivo</label>
+            <select id="prev-stato">
+              <option value="bozza">Bozza</option>
+              <option value="inviato">Inviato</option>
+              <option value="accettato">Accettato</option>
+              <option value="rifiutato">Rifiutato</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="action-bar">
+        <button class="btn-large" style="background:#f0f0f0;color:#444;" onclick="annullaModifica()">Annulla</button>
+        <button class="btn-large" style="background:#e8c84a;color:#1a1a2e;" onclick="salvaPreventivo()" id="btn-salva">💾 Salva preventivo</button>
+        <button class="btn-large" style="background:#1a1a2e;color:#fff;" onclick="anteprima()">👁 Anteprima / Stampa</button>
+      </div>
+
+      <input type="hidden" id="editing-id" value="" />
+    </div>
+
+    <!-- INTESTAZIONE -->
+    <div id="section-intestazione" style="display:none;">
+      <div class="section-title">Intestazione azienda</div>
+      <p style="font-size:13px;color:#888;margin-bottom:20px;">Questi dati vengono usati automaticamente su tutti i preventivi.</p>
+      <div class="card">
+        <div class="form-grid">
+          <div class="field"><label>Ragione sociale</label><input type="text" id="int-ragione" placeholder="La Mia Azienda S.r.l." /></div>
+          <div class="field"><label>P.IVA</label><input type="text" id="int-piva" placeholder="IT12345678901" /></div>
+        </div>
+        <div class="form-grid col3">
+          <div class="field"><label>Indirizzo</label><input type="text" id="int-indirizzo" placeholder="Via Roma, 1" /></div>
+          <div class="field"><label>Città</label><input type="text" id="int-citta" placeholder="Milano" /></div>
+          <div class="field"><label>CAP</label><input type="text" id="int-cap" placeholder="20100" /></div>
+        </div>
+        <div class="form-grid col3">
+          <div class="field"><label>Telefono</label><input type="text" id="int-tel" placeholder="+39 02 1234567" /></div>
+          <div class="field"><label>Email</label><input type="text" id="int-email" placeholder="info@azienda.it" /></div>
+          <div class="field"><label>Sito web</label><input type="text" id="int-web" placeholder="www.azienda.it" /></div>
+        </div>
+        <div class="form-grid">
+          <div class="field"><label>IBAN / Banca</label><input type="text" id="int-iban" placeholder="IT60 X054 2811 1010 0000 0123 456" /></div>
+          <div class="field"><label>Codice SDI</label><input type="text" id="int-sdi" placeholder="ABCDE12" /></div>
+        </div>
+        <div class="form-grid col1">
+          <div class="field"><label>Prefisso numero preventivo</label><input type="text" id="int-prefisso" placeholder="es. PREV- oppure 2025-" /></div>
+        </div>
+        <div class="action-bar" style="margin-top:8px;">
+          <button class="btn-large" style="background:#1a1a2e;color:#fff;" onclick="salvaIntestazione()" id="btn-salva-int">💾 Salva intestazione</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- IMPOSTAZIONI -->
+    <div id="section-impostazioni" style="display:none;">
+      <div class="section-title">Impostazioni accesso</div>
+      <p style="font-size:13px;color:#888;margin-bottom:20px;">Modifica le credenziali di accesso all'app.</p>
+      <div class="card" style="max-width:420px;">
+        <div class="field"><label>Nuovo nome utente</label><input type="text" id="imp-user" /></div>
+        <div class="field"><label>Password attuale</label><input type="password" id="imp-pass-old" placeholder="••••••••" /></div>
+        <div class="field"><label>Nuova password</label><input type="password" id="imp-pass-new" placeholder="••••••••" /></div>
+        <div class="field"><label>Conferma nuova password</label><input type="password" id="imp-pass-confirm" placeholder="••••••••" /></div>
+        <p id="imp-msg" style="font-size:13px;color:#c0392b;margin-top:8px;display:none;"></p>
+        <div class="action-bar" style="margin-top:8px;">
+          <button class="btn-large" style="background:#1a1a2e;color:#fff;" onclick="salvaCredenziali()" id="btn-salva-cred">💾 Aggiorna credenziali</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ANTEPRIMA -->
+<div class="preview-overlay" id="preview-overlay">
+  <div class="preview-box">
+    <div class="preview-topbar">
+      <span>Anteprima preventivo</span>
+      <div style="display:flex;gap:10px;">
+        <button class="btn-sm btn-primary" onclick="window.print()">🖨 Stampa / PDF</button>
+        <button class="btn-sm btn-ghost" onclick="closePreview()">✕ Chiudi</button>
+      </div>
+    </div>
+    <div class="preview-body" id="preview-body"></div>
+  </div>
+</div>
+
+<div class="notification" id="notification"></div>
+
+<script>
+// =========================================================
+// CONFIGURAZIONE WORKER
+// Sostituisci WORKER_URL con l'URL del tuo Cloudflare Worker
+// dopo il deploy (es. https://preventivi-pro-worker.<tuo-account>.workers.dev)
+// APP_SECRET deve corrispondere alla variabile d'ambiente impostata sul Worker
+// =========================================================
+const WORKER_URL  = 'https://simone.pucciottolecce.workers.dev';
+const APP_SECRET  = '123456789';  // stessa stringa di env.APP_SECRET nel Worker
+
+// =========================================================
+// API CLIENT → Cloudflare Worker (che poi parla con Turso)
+// =========================================================
+async function tursoExec(sql, args = []) {
+  const res = await fetch(WORKER_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-App-Secret': APP_SECRET,
+    },
+    body: JSON.stringify({ sql, args }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+    throw new Error(err.error || `Worker HTTP ${res.status}`);
+  }
+  const data = await res.json();
+  if (data.error) throw new Error(data.error);
+  // Restituisce una struttura compatibile con il vecchio codice (tursoQuery usa .rows)
+  return data;
+}
+
+async function tursoQuery(sql, args = []) {
+  const data = await tursoExec(sql, args);
+  return data.rows || [];
+}
+
+// =========================================================
+// INIT DB — crea le tabelle se non esistono
+// =========================================================
+async function initDB() {
+  await tursoExec(`CREATE TABLE IF NOT EXISTS utenti (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE NOT NULL,
+    password TEXT NOT NULL
+  )`);
+  await tursoExec(`CREATE TABLE IF NOT EXISTS intestazione (
+    id INTEGER PRIMARY KEY,
+    ragione TEXT, piva TEXT, indirizzo TEXT, citta TEXT, cap TEXT,
+    tel TEXT, email TEXT, web TEXT, iban TEXT, sdi TEXT, prefisso TEXT
+  )`);
+  await tursoExec(`CREATE TABLE IF NOT EXISTS preventivi (
+    id TEXT PRIMARY KEY,
+    numero TEXT NOT NULL,
+    data TEXT,
+    validita TEXT,
+    cliente TEXT,
+    piva_cliente TEXT,
+    indirizzo_cliente TEXT,
+    citta_cliente TEXT,
+    cap_cliente TEXT,
+    email_cliente TEXT,
+    sdi_cliente TEXT,
+    note TEXT,
+    stato TEXT DEFAULT 'bozza',
+    imponibile REAL DEFAULT 0,
+    iva_total REAL DEFAULT 0,
+    totale REAL DEFAULT 0,
+    voci TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+  )`);
+  // Migrazione colonne nuove (per DB esistenti)
+  try { await tursoExec(`ALTER TABLE preventivi ADD COLUMN email_cliente TEXT`); } catch(e) {}
+  try { await tursoExec(`ALTER TABLE preventivi ADD COLUMN sdi_cliente TEXT`); } catch(e) {}
+
+  // Inserisci utente default se non esiste
+  const utenti = await tursoQuery('SELECT * FROM utenti LIMIT 1');
+  if (utenti.length === 0) {
+    await tursoExec(`INSERT INTO utenti (username, password) VALUES (?, ?)`, ['admin', '1234']);
+  }
+  // Inserisci intestazione default se non esiste
+  const intestazione = await tursoQuery('SELECT * FROM intestazione LIMIT 1');
+  if (intestazione.length === 0) {
+    await tursoExec(`INSERT INTO intestazione (id, ragione, piva, indirizzo, citta, cap, tel, email, web, iban, sdi, prefisso)
+      VALUES (1, 'R.S.G. Di De Filippi Roberto', '05183320752', 'Corte dei Rodi, 13/A', 'Lecce', '73100',
+        '+39 342 9975775', 'r.defilippi69@libero.it', '', '', '', 'PREV-')`);
+  }
+}
+
+// =========================================================
+// STATO SESSIONE (con localStorage per persistenza)
+// =========================================================
+let currentUser = null;
+
+function salvaSessione(user) {
+  try { localStorage.setItem('pp_session', JSON.stringify(user)); } catch(e) {}
+}
+function leggiSessione() {
+  try { return JSON.parse(localStorage.getItem('pp_session')); } catch(e) { return null; }
+}
+function cancellaSessione() {
+  try { localStorage.removeItem('pp_session'); } catch(e) {}
+}
+let intestazioneCache = {};
+let preventiviCache = [];
+let formDirty = false; // traccia modifiche non salvate
+
+// =========================================================
+// LOGIN / LOGOUT
+// =========================================================
+async function doLogin() {
+  const u = document.getElementById('login-user').value.trim();
+  const p = document.getElementById('login-pass').value;
+  if (!u || !p) { document.getElementById('login-err').style.display = 'block'; return; }
+
+  const btn = document.getElementById('btn-login-submit');
+  btn.disabled = true; btn.textContent = 'Accesso…';
+  try {
+    const rows = await tursoQuery('SELECT * FROM utenti WHERE username=? AND password=?', [u, p]);
+    if (rows.length > 0) {
+      currentUser = rows[0];
+      salvaSessione(currentUser);
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('app').style.display = 'block';
+      await caricaIntestazione();
+      caricaImpostazioni();
+      history.replaceState({ tab: 'dashboard' }, '', '#dashboard');
+      showTab('dashboard');
+    } else {
+      document.getElementById('login-err').style.display = 'block';
+    }
+  } catch(e) {
+    notifyErr('Errore di connessione al DB');
+  }
+  btn.disabled = false; btn.textContent = 'Accedi';
+}
+
+function doLogout() {
+  currentUser = null;
+  formDirty = false;
+  cancellaSessione();
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('login-user').value = '';
+  document.getElementById('login-pass').value = '';
+  document.getElementById('login-err').style.display = 'none';
+}
+
+// =========================================================
+// TABS
+// =========================================================
+let _navFromPopstate = false;
+function showTab(t) {
+  ['dashboard','lista','nuovo','scadenzario','intestazione','impostazioni'].forEach(s => {
+    document.getElementById('section-'+s).style.display = s===t ? 'block' : 'none';
+    const tab = document.getElementById('tab-'+s);
+    if (tab) tab.classList.toggle('active', s===t);
+  });
+  if (t==='lista') renderLista();
+  if (t==='dashboard') renderDashboard();
+  if (t==='scadenzario') renderScadenzario();
+  // Aggiorna history senza duplicare la stessa voce
+  if (!_navFromPopstate) {
+    const cur = history.state && history.state.tab;
+    if (cur !== t) history.pushState({ tab: t }, '', '#' + t);
+  }
+}
+
+window.addEventListener('popstate', function(e) {
+  const tab = (e.state && e.state.tab) || 'dashboard';
+  _navFromPopstate = true;
+  showTab(tab);
+  _navFromPopstate = false;
+});
+
+// Nuovo preventivo: chiede conferma se form ha modifiche non salvate
+function nuovoPreventivo() {
+  if (formDirty) {
+    if (!confirm('Hai modifiche non salvate. Vuoi davvero creare un nuovo preventivo?')) return;
+  }
+  showTab('nuovo');
+  resetNuovo();
+}
+
+// Annulla: torna alla lista con conferma se dirty
+function annullaModifica() {
+  if (formDirty) {
+    if (!confirm('Hai modifiche non salvate. Vuoi annullare?')) return;
+  }
+  formDirty = false;
+  showTab('lista');
+}
+
+// =========================================================
+// INTESTAZIONE
+// =========================================================
+const INT_FIELDS = ['ragione','piva','indirizzo','citta','cap','tel','email','web','iban','sdi','prefisso'];
+
+async function caricaIntestazione() {
+  try {
+    const rows = await tursoQuery('SELECT * FROM intestazione WHERE id=1');
+    intestazioneCache = rows[0] || {};
+  } catch(e) {
+    intestazioneCache = {};
+  }
+  INT_FIELDS.forEach(f => {
+    const el = document.getElementById('int-'+f);
+    if (el) el.value = intestazioneCache[f] || '';
+  });
+  aggiornaBanner(intestazioneCache);
+}
+
+function aggiornaBanner(int) {
+  const d = int || intestazioneCache;
+  const parts = [`<span class="company-name">${esc2(d.ragione||'—')}</span>`];
+  if (d.piva) parts.push(`<span>P.IVA ${esc2(d.piva)}</span>`);
+  const ind = [d.indirizzo, d.cap, d.citta].filter(Boolean).join(' ');
+  if (ind) parts.push(`<span>${esc2(ind)}</span>`);
+  if (d.tel) parts.push(`<span>${esc2(d.tel)}</span>`);
+  if (d.email) parts.push(`<span>${esc2(d.email)}</span>`);
+  document.getElementById('company-banner-inner').innerHTML = parts.join('<span class="company-sep">·</span>');
+}
+
+function getIntestazione() {
+  const d = {};
+  INT_FIELDS.forEach(f => {
+    const el = document.getElementById('int-'+f);
+    d[f] = el ? el.value.trim() : '';
+  });
+  return d;
+}
+
+async function salvaIntestazione() {
+  const d = getIntestazione();
+  const btn = document.getElementById('btn-salva-int');
+  btn.disabled = true; btn.textContent = 'Salvataggio…';
+  try {
+    await tursoExec(`INSERT OR REPLACE INTO intestazione (id,ragione,piva,indirizzo,citta,cap,tel,email,web,iban,sdi,prefisso)
+      VALUES (1,?,?,?,?,?,?,?,?,?,?,?)`,
+      [d.ragione,d.piva,d.indirizzo,d.citta,d.cap,d.tel,d.email,d.web,d.iban,d.sdi,d.prefisso]);
+    intestazioneCache = d;
+    aggiornaBanner(d);
+    notify('Intestazione salvata ✓');
+  } catch(e) { notifyErr('Errore salvataggio intestazione'); }
+  btn.disabled = false; btn.textContent = '💾 Salva intestazione';
+}
+
+// =========================================================
+// NUMERO PROGRESSIVO
+// =========================================================
+async function prossNumero() {
+  const prefisso = (intestazioneCache.prefisso || 'PREV-');
+  try {
+    const rows = await tursoQuery('SELECT numero FROM preventivi');
+    let maxNum = 0;
+    rows.forEach(r => {
+      if ((r.numero||'').startsWith(prefisso)) {
+        const n = parseInt((r.numero||'').slice(prefisso.length), 10);
+        if (!isNaN(n) && n > maxNum) maxNum = n;
+      }
+    });
+    return prefisso + String(maxNum + 1).padStart(3, '0');
+  } catch(e) { return prefisso + '001'; }
+}
+
+async function generaNumero() {
+  document.getElementById('prev-numero').value = await prossNumero();
+}
+
+// =========================================================
+// VOCI
+// =========================================================
+// Parsing unificato voci: supporta sia formato legacy array che nuovo {items, ivaGlobale}
+function parseVociRaw(raw) {
+  try {
+    const parsed = JSON.parse(raw || '[]');
+    if (Array.isArray(parsed)) return { items: parsed, ivaGlobale: '22' }; // legacy
+    return { items: parsed.items || [], ivaGlobale: parsed.ivaGlobale || '22' };
+  } catch(e) { return { items: [], ivaGlobale: '22' }; }
+}
+
+let vociData = [];
+
+function addVoce(v) {
+  vociData.push(v || { desc:'', qty:1, um:'Mq', prezzo:0 });
+  formDirty = true;
+  renderVoci();
+}
+
+function aggiornaVociTotali() {
+  let imponibile = 0, ivaTotal = 0;
+  const ivaVal = (document.getElementById('iva-globale')||{}).value || '22';
+  const isBollo = ivaVal === 'bollo';
+  const ivaRate = isBollo ? 0 : (parseFloat(ivaVal) || 0);
+  vociData.forEach((v, i) => {
+    const qty = parseFloat(v.qty) || 0;
+    const prezzo = parseFloat(v.prezzo) || 0;
+    const tot = qty * prezzo;
+    imponibile += tot;
+    // Aggiorna il totale nella card mobile se esiste
+    const el = document.getElementById('tot-voce-' + i);
+    if (el) el.textContent = 'Totale: € ' + fmt(tot);
+  });
+  ivaTotal = isBollo ? 2 : (imponibile * ivaRate / 100);
+  document.getElementById('tot-imponibile').textContent = '€ ' + fmt(imponibile);
+  document.getElementById('tot-iva').textContent = '€ ' + fmt(ivaTotal);
+  document.getElementById('tot-totale').textContent = '€ ' + fmt(imponibile + ivaTotal);
+}
+
+function renderVoci() {
+  const tbody = document.getElementById('voci-body');
+  const isMobile = window.innerWidth <= 640;
+  tbody.innerHTML = '';
+
+  if (isMobile) {
+    // Layout a card verticali su mobile
+    vociData.forEach((v, i) => {
+      const qty = parseFloat(v.qty) || 0;
+      const prezzo = parseFloat(v.prezzo) || 0;
+      const isBollo = v.iva === 'bollo';
+      const tot = qty * prezzo;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td colspan="7" style="padding:0;border-bottom:2px solid #ebebeb;">
+          <div style="padding:12px;background:#fff;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+              <span style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;">Voce ${i+1}</span>
+              <button onclick="vociData.splice(${i},1);formDirty=true;renderVoci()" style="background:none;border:none;color:#e74c3c;font-size:20px;cursor:pointer;line-height:1;padding:0 4px;">×</button>
+            </div>
+            <div style="margin-bottom:8px;">
+              <label style="font-size:11px;font-weight:600;color:#777;text-transform:uppercase;display:block;margin-bottom:4px;">Descrizione</label>
+              <input type="text" value="${esc(v.desc)}"
+                style="width:100%;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:16px;font-family:inherit;outline:none;"
+                oninput="vociData[${i}].desc=this.value;formDirty=true"
+                onfocus="this.style.borderColor='#1a1a2e'" onblur="this.style.borderColor='#e0e0e0'" />
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+              <div>
+                <label style="font-size:11px;font-weight:600;color:#777;text-transform:uppercase;display:block;margin-bottom:4px;">Qtà</label>
+                <input type="number" value="${qty}" min="0" step="any" inputmode="decimal"
+                  style="width:100%;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:16px;font-family:inherit;outline:none;text-align:right;"
+                  oninput="vociData[${i}].qty=parseFloat(this.value)||0;formDirty=true;aggiornaVociTotali()"
+                  onfocus="this.style.borderColor='#1a1a2e'" onblur="this.style.borderColor='#e0e0e0'" />
+              </div>
+              <div>
+                <label style="font-size:11px;font-weight:600;color:#777;text-transform:uppercase;display:block;margin-bottom:4px;">U.M.</label>
+                <input type="text" value="${esc(v.um)}"
+                  style="width:100%;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:16px;font-family:inherit;outline:none;text-align:center;"
+                  oninput="vociData[${i}].um=this.value;formDirty=true"
+                  onfocus="this.style.borderColor='#1a1a2e'" onblur="this.style.borderColor='#e0e0e0'" />
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+              <div>
+                <label style="font-size:11px;font-weight:600;color:#777;text-transform:uppercase;display:block;margin-bottom:4px;">Prezzo €</label>
+                <input type="number" value="${prezzo}" min="0" step="any" inputmode="decimal"
+                  style="width:100%;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:16px;font-family:inherit;outline:none;text-align:right;"
+                  oninput="vociData[${i}].prezzo=parseFloat(this.value)||0;formDirty=true;aggiornaVociTotali()"
+                  onfocus="this.style.borderColor='#1a1a2e'" onblur="this.style.borderColor='#e0e0e0'" />
+              </div>
+              <div style="display:flex;flex-direction:column;justify-content:flex-end;">
+                <div id="tot-voce-${i}" style="text-align:right;font-size:14px;font-weight:700;color:#1a1a2e;padding:10px 0;">
+                  Totale: € ${fmt(tot)}
+                </div>
+              </div>
+            </div>
+          </div>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  } else {
+    // Layout tabella desktop
+    vociData.forEach((v, i) => {
+      const qty    = parseFloat(v.qty) || 0;
+      const prezzo = parseFloat(v.prezzo) || 0;
+      const isBollo = v.iva === 'bollo';
+      const ivaRate = isBollo ? 0 : (parseFloat(v.iva) || 0);
+      const tot    = qty * prezzo;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><input type="text" value="${esc(v.desc)}" oninput="vociData[${i}].desc=this.value;formDirty=true" /></td>
+        <td><input type="number" value="${qty}" min="0" step="any" oninput="vociData[${i}].qty=parseFloat(this.value)||0;formDirty=true;aggiornaVociTotali()" style="text-align:right;" /></td>
+        <td><input type="text" value="${esc(v.um)}" oninput="vociData[${i}].um=this.value;formDirty=true" style="text-align:center;" /></td>
+        <td><input type="number" value="${prezzo}" min="0" step="any" oninput="vociData[${i}].prezzo=parseFloat(this.value)||0;formDirty=true;aggiornaVociTotali()" style="text-align:right;" /></td>
+        <td class="td-totale" style="text-align:right;">€ ${fmt(tot)}</td>
+        <td class="td-del"><button class="btn-del-row" onclick="vociData.splice(${i},1);formDirty=true;renderVoci()" title="Rimuovi">×</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+    // Righe vuote visive solo su desktop
+    const righeVuote = Math.max(0, 5 - vociData.length);
+    for (let e = 0; e < righeVuote; e++) {
+      const emptyTr = document.createElement('tr');
+      emptyTr.className = 'row-empty';
+      emptyTr.innerHTML = `<td></td><td></td><td></td><td></td><td></td><td></td>`;
+      tbody.appendChild(emptyTr);
+    }
+  }
+
+  aggiornaVociTotali();
+}
+
+// =========================================================
+// RESET FORM NUOVO
+// =========================================================
+async function resetNuovo(prev) {
+  document.getElementById('nuovo-title').textContent = prev ? 'Modifica preventivo' : 'Nuovo preventivo';
+  document.getElementById('editing-id').value = prev ? prev.id : '';
+  document.getElementById('prev-numero').value = prev ? prev.numero : await prossNumero();
+  document.getElementById('prev-data').value = prev ? prev.data : new Date().toISOString().slice(0,10);
+  document.getElementById('prev-validita').value = prev ? prev.validita : 30;
+  document.getElementById('prev-cliente').value = prev ? (prev.cliente||'') : '';
+  document.getElementById('prev-piva-cliente').value = prev ? (prev.piva_cliente||'') : '';
+  document.getElementById('prev-indirizzo-cliente').value = prev ? (prev.indirizzo_cliente||'') : '';
+  document.getElementById('prev-citta-cliente').value = prev ? (prev.citta_cliente||'') : '';
+  document.getElementById('prev-cap-cliente').value = prev ? (prev.cap_cliente||'') : '';
+  document.getElementById('prev-email-cliente').value = prev ? (prev.email_cliente||'') : '';
+  document.getElementById('prev-sdi-cliente').value = prev ? (prev.sdi_cliente||'') : '';
+  const NOTE_DEFAULT = `I lavori verranno eseguiti a regola d'arte e nel rispetto delle normative vigenti in materia edile e di sicurezza sul lavoro (D.Lgs. 81/2008 e s.m.i.).
+
+Regime fiscale: Operazione esente IVA ai sensi dell'art. 1, commi 54-89, Legge n. 190/2014 (Regime Forfettario). Non si applica la ritenuta d'acconto ai sensi dell'art. 1, c. 67, L. 190/2014.
+Il committente è tenuto al versamento dell'imposta di bollo di € 2,00 ai sensi del D.P.R. 642/1972 (per importi superiori a € 77,47).
+
+Modalità di pagamento: da concordare. Validità del preventivo: 30 giorni dalla data di emissione.`;
+  document.getElementById('prev-note').value = prev ? (prev.note||'') : NOTE_DEFAULT;
+  document.getElementById('prev-stato').value = prev ? (prev.stato||'bozza') : 'bozza';
+  // Pulisci errori validazione
+  ['field-numero','field-cliente'].forEach(id => document.getElementById(id)?.classList.remove('error'));
+  vociData = prev ? JSON.parse(JSON.stringify(prev.voci || [])) : [];
+  // Ripristina IVA globale (default 22%)
+  const ivaGlobEl = document.getElementById('iva-globale');
+  if (ivaGlobEl) ivaGlobEl.value = prev ? (prev.ivaGlobale || '22') : '22';
+  if (!prev) addVoce();
+  else renderVoci();
+  formDirty = false;
+}
+
+// =========================================================
+// VALIDAZIONE
+// =========================================================
+function validateForm() {
+  let valid = true;
+  const numero = document.getElementById('prev-numero').value.trim();
+  const cliente = document.getElementById('prev-cliente').value.trim();
+  const fn = document.getElementById('field-numero');
+  const fc = document.getElementById('field-cliente');
+  fn.classList.toggle('error', !numero);
+  fc.classList.toggle('error', !cliente);
+  if (!numero || !cliente) valid = false;
+  return valid;
+}
+
+// =========================================================
+// SALVA PREVENTIVO
+// =========================================================
+async function salvaPreventivo() {
+  if (!validateForm()) { notifyErr('Compila i campi obbligatori'); return; }
+  const btn = document.getElementById('btn-salva');
+  btn.disabled = true; btn.textContent = 'Salvataggio…';
+
+  const editId = document.getElementById('editing-id').value;
+  let imponibile = 0, ivaTotal = 0;
+  const ivaVal = document.getElementById('iva-globale').value;
+  const isGlobBollo = ivaVal === 'bollo';
+  const ivaGlobRate = isGlobBollo ? 0 : (parseFloat(ivaVal) || 0);
+  vociData.forEach(v => {
+    const tot = (parseFloat(v.qty)||0) * (parseFloat(v.prezzo)||0);
+    imponibile += tot;
+  });
+  ivaTotal = isGlobBollo ? 2 : (imponibile * ivaGlobRate / 100);
+  const p = {
+    id: editId || Date.now().toString(),
+    numero: document.getElementById('prev-numero').value.trim(),
+    data: document.getElementById('prev-data').value,
+    validita: document.getElementById('prev-validita').value,
+    cliente: document.getElementById('prev-cliente').value.trim(),
+    piva_cliente: document.getElementById('prev-piva-cliente').value.trim(),
+    indirizzo_cliente: document.getElementById('prev-indirizzo-cliente').value.trim(),
+    citta_cliente: document.getElementById('prev-citta-cliente').value.trim(),
+    cap_cliente: document.getElementById('prev-cap-cliente').value.trim(),
+    email_cliente: document.getElementById('prev-email-cliente').value.trim(),
+    sdi_cliente: document.getElementById('prev-sdi-cliente').value.trim(),
+    note: document.getElementById('prev-note').value.trim(),
+    stato: document.getElementById('prev-stato').value,
+    voci: JSON.stringify({ items: vociData, ivaGlobale: ivaVal }),
+    imponibile, ivaTotal, totale: imponibile + ivaTotal
+  };
+
+  try {
+    await tursoExec(`INSERT OR REPLACE INTO preventivi
+      (id,numero,data,validita,cliente,piva_cliente,indirizzo_cliente,citta_cliente,cap_cliente,email_cliente,sdi_cliente,note,stato,voci,imponibile,iva_total,totale)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [p.id,p.numero,p.data,p.validita,p.cliente,p.piva_cliente,p.indirizzo_cliente,
+       p.citta_cliente,p.cap_cliente,p.email_cliente,p.sdi_cliente,p.note,p.stato,p.voci,p.imponibile,p.ivaTotal,p.totale]);
+    formDirty = false;
+    notify('Preventivo salvato ✓');
+    showTab('lista');
+  } catch(e) { notifyErr('Errore salvataggio: ' + e.message); }
+  btn.disabled = false; btn.textContent = '💾 Salva preventivo';
+}
+
+// =========================================================
+// LISTA PREVENTIVI
+// =========================================================
+const statiLabel = { bozza:'Bozza', inviato:'Inviato', accettato:'Accettato', rifiutato:'Rifiutato' };
+
+async function renderLista() {
+  const el = document.getElementById('lista-preventivi');
+  el.innerHTML = '<div class="skeleton skel-row"></div><div class="skeleton skel-row"></div><div class="skeleton skel-row"></div>';
+
+  try {
+    preventiviCache = await loadPreventivi();
+  } catch(e) { notifyErr('Errore caricamento preventivi'); return; }
+
+  let list = [...preventiviCache];
+  const q = (document.getElementById('search-input')||{}).value||'';
+  const stato = (document.getElementById('filter-stato')||{}).value||'';
+  const sortBy = (document.getElementById('sort-by')||{}).value||'data-desc';
+
+  if (q) {
+    const ql = q.toLowerCase();
+    list = list.filter(p => (p.cliente||'').toLowerCase().includes(ql) || (p.numero||'').toLowerCase().includes(ql));
+  }
+  if (stato) list = list.filter(p => p.stato === stato);
+  list.sort((a,b) => {
+    if (sortBy==='data-desc') return (b.data||'').localeCompare(a.data||'');
+    if (sortBy==='data-asc')  return (a.data||'').localeCompare(b.data||'');
+    if (sortBy==='totale-desc') return (b.totale||0)-(a.totale||0);
+    if (sortBy==='totale-asc')  return (a.totale||0)-(b.totale||0);
+    if (sortBy==='cliente-asc') return (a.cliente||'').localeCompare(b.cliente||'');
+    return 0;
+  });
+
+  if (!list.length) {
+    el.innerHTML = '<div class="empty-list">Nessun preventivo trovato.<br><br><button onclick="nuovoPreventivo()" style="background:#1a1a2e;color:#fff;border:none;padding:10px 22px;border-radius:8px;font-size:14px;cursor:pointer;font-weight:600;">+ Crea il primo preventivo</button></div>';
+    return;
+  }
+  el.innerHTML = list.map(p => `
+    <div class="prev-list-item">
+      <div class="prev-list-meta">
+        <div class="prev-list-num">${esc2(p.numero)}</div>
+        <div class="prev-list-cliente">${esc2(p.cliente||'—')}</div>
+        <div class="prev-list-data">${formatData(p.data)}</div>
+      </div>
+      <span class="badge-stato badge-${p.stato}">${statiLabel[p.stato]||p.stato}</span>
+      <span class="prev-list-totale">€ ${fmt(p.totale)}</span>
+      <div class="prev-list-actions">
+        <button class="btn-sm" style="background:#f0f0f0;color:#333;" onclick="apriAnteprima('${p.id}')" title="Anteprima">👁</button>
+        <button class="btn-sm" style="background:#f0f0f0;color:#333;" onclick="modificaPreventivo('${p.id}')" title="Modifica">✏️</button>
+        <button class="btn-sm" style="background:#e8f4fd;color:#1565c0;" onclick="duplicaPreventivo('${p.id}')" title="Duplica">📋</button>
+        <button class="btn-sm" style="background:#f0fdf4;color:#27ae60;" onclick="esportaPDF('${p.id}')" title="Esporta PDF">📄</button>
+        <button class="btn-sm btn-danger" onclick="eliminaPreventivo('${p.id}')" title="Elimina">🗑</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function loadPreventivi() {
+  const rows = await tursoQuery('SELECT * FROM preventivi ORDER BY created_at DESC');
+  return rows.map(r => ({
+    ...r,
+    voci: (() => { const r = parseVociRaw(r.voci); return r.items; })(),
+    ivaGlobale: (() => { return parseVociRaw(r.voci).ivaGlobale; })(),
+    totale: parseFloat(r.totale)||0,
+    imponibile: parseFloat(r.imponibile)||0,
+    ivaTotal: parseFloat(r.iva_total)||0
+  }));
+}
+
+async function modificaPreventivo(id) {
+  try {
+    const rows = await tursoQuery('SELECT * FROM preventivi WHERE id=?', [id]);
+    if (!rows[0]) return;
+    const parsed = parseVociRaw(rows[0].voci);
+    const p = {
+      ...rows[0],
+      voci: parsed.items,
+      ivaGlobale: parsed.ivaGlobale
+    };
+    showTab('nuovo');
+    await resetNuovo(p);
+  } catch(e) { notifyErr('Errore caricamento preventivo'); }
+}
+
+async function eliminaPreventivo(id) {
+  if (!confirm('Eliminare questo preventivo?')) return;
+  try {
+    await tursoExec('DELETE FROM preventivi WHERE id=?', [id]);
+    renderLista();
+    notify('Preventivo eliminato');
+  } catch(e) { notifyErr('Errore eliminazione'); }
+}
+
+async function duplicaPreventivo(id) {
+  try {
+    const rows = await tursoQuery('SELECT * FROM preventivi WHERE id=?', [id]);
+    if (!rows[0]) return;
+    const orig = rows[0];
+    const nuovoId   = Date.now().toString();
+    const nuovoNum  = await prossNumero();
+    const nuovaData = new Date().toISOString().slice(0,10);
+    await tursoExec(`INSERT INTO preventivi
+      (id,numero,data,validita,cliente,piva_cliente,indirizzo_cliente,citta_cliente,cap_cliente,note,stato,voci,imponibile,iva_total,totale)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [nuovoId,nuovoNum,nuovaData,orig.validita,orig.cliente,orig.piva_cliente,
+       orig.indirizzo_cliente,orig.citta_cliente,orig.cap_cliente,orig.note,
+       'bozza',orig.voci,orig.imponibile,orig.iva_total,orig.totale]);
+    renderLista();
+    notify('Preventivo duplicato ✓');
+  } catch(e) { notifyErr('Errore duplicazione'); }
+}
+
+// =========================================================
+// DASHBOARD
+// =========================================================
+function giorniScadenza(p) {
+  if (!p.data) return 0;
+  try {
+    const [yy,mm,dd] = p.data.split('-').map(Number);
+    const scad = new Date(yy, mm-1, dd);
+    scad.setDate(scad.getDate() + parseInt(p.validita||30, 10));
+    scad.setHours(0,0,0,0);
+    const oggi = new Date(); oggi.setHours(0,0,0,0);
+    return Math.round((scad - oggi) / 86400000);
+  } catch(e) { return 0; }
+}
+
+async function renderDashboard() {
+  try {
+    const list = await loadPreventivi();
+    const tot = list.length;
+    const valoreTotale    = list.reduce((s,p)=>s+(p.totale||0), 0);
+    const accettati       = list.filter(p=>p.stato==='accettato');
+    const valoreAccettati = accettati.reduce((s,p)=>s+(p.totale||0), 0);
+    const inviati         = list.filter(p=>p.stato==='inviato');
+    const scaduti         = inviati.filter(p=>giorniScadenza(p) < 0);
+
+    document.getElementById('dash-grid').innerHTML = `
+      <div class="dash-card blue"><div class="label">Preventivi totali</div><div class="value">${tot}</div><div class="sub">€ ${fmt(valoreTotale)} complessivi</div></div>
+      <div class="dash-card green"><div class="label">Accettati</div><div class="value">${accettati.length}</div><div class="sub">€ ${fmt(valoreAccettati)}</div></div>
+      <div class="dash-card yellow"><div class="label">In attesa</div><div class="value">${inviati.length}</div><div class="sub">preventivi inviati</div></div>
+      <div class="dash-card red"><div class="label">Scaduti</div><div class="value">${scaduti.length}</div><div class="sub">validità superata</div></div>
+    `;
+
+    const ultimi = [...list].sort((a,b)=>(b.data||'').localeCompare(a.data||'')).slice(0,5);
+    document.getElementById('dash-ultimi').innerHTML = ultimi.length
+      ? ultimi.map(p=>`
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid #f0f0f0;font-size:13px;">
+          <div>
+            <div style="font-weight:700;color:#1a1a2e;">${esc2(p.numero)} — ${esc2(p.cliente||'—')}</div>
+            <div style="color:#999;">${formatData(p.data)}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span class="badge-stato badge-${p.stato}">${statiLabel[p.stato]||p.stato}</span>
+            <span style="font-weight:700;">€ ${fmt(p.totale)}</span>
+          </div>
+        </div>`).join('')
+      : '<p style="color:#bbb;font-size:13px;">Nessun preventivo ancora creato.</p>';
+
+    const stati = ['bozza','inviato','accettato','rifiutato'];
+    document.getElementById('dash-stati').innerHTML = stati.map(s=>{
+      const n = list.filter(p=>p.stato===s).length;
+      const pct = tot ? Math.round(n/tot*100) : 0;
+      return `<div style="margin-bottom:14px;">
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px;">
+          <span>${statiLabel[s]}</span><span style="color:#999;">${n} (${pct}%)</span>
+        </div>
+        <div style="background:#f0f0f0;border-radius:6px;height:8px;overflow:hidden;">
+          <div style="background:#1a1a2e;height:100%;width:${pct}%;"></div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) { notifyErr('Errore caricamento dashboard'); }
+}
+
+// =========================================================
+// SCADENZARIO
+// =========================================================
+async function renderScadenzario() {
+  const el = document.getElementById('scad-list');
+  try {
+    const list = (await loadPreventivi()).filter(p=>p.stato==='inviato');
+    if (!list.length) { el.innerHTML = '<div class="empty-list">Nessun preventivo inviato in attesa di risposta.</div>'; return; }
+    const withDays = list.map(p=>({ p, giorni: giorniScadenza(p) }));
+    withDays.sort((a,b)=>a.giorni-b.giorni);
+    el.innerHTML = withDays.map(({p,giorni})=>{
+      const cls     = giorni < 0 ? 'scaduto' : (giorni<=7 ? 'in-scadenza' : '');
+      const daysCls = giorni < 0 ? 'neg' : (giorni<=7 ? 'warn' : 'ok');
+      const label   = giorni < 0 ? `${Math.abs(giorni)}gg fa` : `${giorni}gg`;
+      return `<div class="scad-item ${cls}">
+        <div class="scad-days ${daysCls}">${label}</div>
+        <div class="scad-info">
+          <div class="num">${esc2(p.numero)}</div>
+          <div class="cliente">${esc2(p.cliente||'—')}</div>
+          <div class="date">Inviato il ${formatData(p.data)} · validità ${p.validita||30} giorni</div>
+        </div>
+        <div class="scad-totale">€ ${fmt(p.totale)}</div>
+      </div>`;
+    }).join('');
+  } catch(e) { notifyErr('Errore scadenzario'); }
+}
+
+// =========================================================
+// CREDENZIALI
+// =========================================================
+async function caricaImpostazioni() {
+  if (!currentUser) return;
+  document.getElementById('imp-user').value = currentUser.username;
+}
+
+async function salvaCredenziali() {
+  const msg = document.getElementById('imp-msg');
+  const oldPass  = document.getElementById('imp-pass-old').value;
+  const newUser  = document.getElementById('imp-user').value.trim();
+  const newPass  = document.getElementById('imp-pass-new').value;
+  const conf     = document.getElementById('imp-pass-confirm').value;
+  msg.style.display = 'none';
+
+  if (!newUser) { msg.textContent='Il nome utente non può essere vuoto.'; msg.style.display='block'; return; }
+  if (oldPass !== currentUser.password) { msg.textContent='Password attuale errata.'; msg.style.display='block'; return; }
+  if (newPass && newPass !== conf) { msg.textContent='Le nuove password non coincidono.'; msg.style.display='block'; return; }
+
+  const finalPass = newPass || currentUser.password;
+  const btn = document.getElementById('btn-salva-cred');
+  btn.disabled = true;
+  try {
+    await tursoExec('UPDATE utenti SET username=?, password=? WHERE id=?', [newUser, finalPass, currentUser.id]);
+    currentUser.username = newUser;
+    currentUser.password = finalPass;
+    document.getElementById('imp-pass-old').value='';
+    document.getElementById('imp-pass-new').value='';
+    document.getElementById('imp-pass-confirm').value='';
+    notify('Credenziali aggiornate ✓');
+  } catch(e) { msg.textContent='Errore aggiornamento credenziali.'; msg.style.display='block'; }
+  btn.disabled = false;
+}
+
+// =========================================================
+// ANTEPRIMA
+// =========================================================
+function anteprima() {
+  const int = intestazioneCache;
+  const p   = buildPrevCorrente(int);
+  showPreview(p);
+}
+
+function apriAnteprima(id) {
+  const p = preventiviCache.find(x=>x.id===id);
+  if (p) showPreview(p);
+  else {
+    tursoQuery('SELECT * FROM preventivi WHERE id=?', [id]).then(rows => {
+      if (rows[0]) { const pv = parseVociRaw(rows[0].voci); showPreview({ ...rows[0], voci: pv.items, ivaGlobale: pv.ivaGlobale }); }
+    });
+  }
+}
+
+function buildPrevCorrente(int) {
+  let imponibile=0, ivaTotal=0;
+  const ivaVal = document.getElementById('iva-globale').value;
+  const isBollo = ivaVal === 'bollo';
+  const ivaRate = isBollo ? 0 : (parseFloat(ivaVal) || 0);
+  vociData.forEach(v=>{
+    const tot=(parseFloat(v.qty)||0)*(parseFloat(v.prezzo)||0);
+    imponibile+=tot;
+  });
+  ivaTotal = isBollo ? 2 : (imponibile * ivaRate / 100);
+  return {
+    numero: document.getElementById('prev-numero').value,
+    data: document.getElementById('prev-data').value,
+    validita: document.getElementById('prev-validita').value,
+    cliente: document.getElementById('prev-cliente').value,
+    piva_cliente: document.getElementById('prev-piva-cliente').value,
+    indirizzo_cliente: document.getElementById('prev-indirizzo-cliente').value,
+    citta_cliente: document.getElementById('prev-citta-cliente').value,
+    cap_cliente: document.getElementById('prev-cap-cliente').value,
+    note: document.getElementById('prev-note').value,
+    voci: vociData,
+    ivaGlobale: ivaVal,
+    imponibile, ivaTotal, totale: imponibile+ivaTotal,
+    intestazione: int
+  };
+}
+
+function showPreview(p) {
+  const int = p.intestazione || intestazioneCache || {};
+  const html = `
+    <div class="preventivo-doc">
+      <div class="doc-header">
+        <div class="doc-logo-area">
+          <h2>${esc2(int.ragione||'Azienda')}</h2>
+          <p>
+            ${int.indirizzo?esc2(int.indirizzo)+', ':''}${int.cap?esc2(int.cap)+' ':''}${esc2(int.citta||'')}<br>
+            ${int.piva?'P.IVA: '+esc2(int.piva)+'<br>':''}
+            ${int.tel?'Tel: '+esc2(int.tel)+'<br>':''}
+            ${int.email?esc2(int.email)+'<br>':''}
+            ${int.web?esc2(int.web):''}
+          </p>
+        </div>
+        <div class="doc-info">
+          <div style="font-size:12px;color:#aaa;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Preventivo</div>
+          <div class="num">N° ${esc2(p.numero||'—')}</div>
+          <div class="data">Data: ${formatData(p.data)}</div>
+          ${p.validita?`<div class="data">Validità: ${p.validita} giorni</div>`:''}
+        </div>
+      </div>
+      <div class="doc-destinatario">
+        <h4>Destinatario</h4>
+        <p>
+          <strong>${esc2(p.cliente||'—')}</strong><br>
+          ${p.piva_cliente?'P.IVA: '+esc2(p.piva_cliente)+'<br>':''}
+          ${p.email_cliente?'Email: '+esc2(p.email_cliente)+'<br>':''}
+          ${p.sdi_cliente?'Cod. SDI: '+esc2(p.sdi_cliente)+'<br>':''}
+          ${p.indirizzo_cliente?esc2(p.indirizzo_cliente)+'<br>':''}
+          ${(p.cap_cliente||p.citta_cliente)?(esc2(p.cap_cliente||'')+' '+esc2(p.citta_cliente||'')).trim():''}
+        </p>
+      </div>
+      <table class="doc-table">
+        <thead><tr>
+          <th style="width:44%">Descrizione</th>
+          <th style="width:8%;text-align:right">Qtà</th>
+          <th style="width:8%">U.M.</th>
+          <th style="width:18%;text-align:right">Prezzo unit.</th>
+          <th style="width:16%;text-align:right">Totale</th>
+        </tr></thead>
+        <tbody>
+          ${(p.voci||[]).map(v=>{
+            const tot=(parseFloat(v.qty)||0)*(parseFloat(v.prezzo)||0);
+            return `<tr>
+              <td>${esc2(v.desc)}</td>
+              <td style="text-align:right">${v.qty}</td>
+              <td>${esc2(v.um||'')}</td>
+              <td style="text-align:right">€ ${fmt(v.prezzo)}</td>
+              <td style="text-align:right">€ ${fmt(tot)}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+      <div class="doc-totali">
+        <div class="doc-totali-inner">
+          <div class="doc-tot-row"><span>Imponibile</span><span>€ ${fmt(p.imponibile)}</span></div>
+          <div class="doc-tot-row"><span>IVA ${p.ivaGlobale === 'bollo' ? '(Bollo)' : (p.ivaGlobale||'22')+'%'}</span><span>€ ${fmt(p.ivaTotal||p.iva_total)}</span></div>
+          <div class="doc-tot-row grand"><span>TOTALE</span><span>€ ${fmt(p.totale)}</span></div>
+        </div>
+      </div>
+      ${p.note?`<div class="doc-note"><strong>Note:</strong> ${esc2(p.note)}</div>`:''}
+      ${int.iban?`<div class="doc-note" style="margin-top:12px;">Coordinate bancarie: ${esc2(int.iban)}</div>`:''}
+      <div class="doc-footer">
+        <span>${esc2(int.ragione||'')}${int.piva?' — P.IVA '+esc2(int.piva):''}</span>
+        <span>Preventivo N° ${esc2(p.numero||'')} del ${formatData(p.data)}</span>
+      </div>
+    </div>`;
+  document.getElementById('preview-body').innerHTML = html;
+  document.getElementById('preview-overlay').classList.add('open');
+}
+
+function closePreview() {
+  document.getElementById('preview-overlay').classList.remove('open');
+}
+
+// =========================================================
+// EXPORT PDF
+// =========================================================
+function esportaPDF(id) {
+  const p = preventiviCache.find(x=>x.id===id);
+  if (!p) { notifyErr('Preventivo non trovato'); return; }
+  const int = p.intestazione || intestazioneCache || {};
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(16); doc.setTextColor(26,26,46);
+  doc.text(int.ragione || 'Azienda', 14, 18);
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(9); doc.setTextColor(90,90,90);
+  let y = 25;
+  const infoLines = [];
+  if (int.indirizzo||int.cap||int.citta) infoLines.push(`${int.indirizzo||''} ${int.cap||''} ${int.citta||''}`.trim());
+  if (int.piva)  infoLines.push('P.IVA: '+int.piva);
+  if (int.tel)   infoLines.push('Tel: '+int.tel);
+  if (int.email) infoLines.push(int.email);
+  infoLines.forEach(line => { doc.text(line, 14, y); y += 5; });
+
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(14); doc.setTextColor(26,26,46);
+  doc.text('PREVENTIVO N° ' + (p.numero||''), 196, 18, { align:'right' });
+  doc.setFont('helvetica','normal');
+  doc.setFontSize(9); doc.setTextColor(120,120,120);
+  doc.text('Data: ' + formatData(p.data), 196, 25, { align:'right' });
+  if (p.validita) doc.text('Validità: '+p.validita+' giorni', 196, 30, { align:'right' });
+
+  const yLine = Math.max(y, 30) + 4;
+  doc.setDrawColor(26,26,46); doc.setLineWidth(0.8);
+  doc.line(14, yLine, 196, yLine);
+
+  let y2 = yLine + 10;
+  doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(150,150,150);
+  doc.text('DESTINATARIO', 14, y2); y2 += 6;
+  doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(20,20,20);
+  doc.text(p.cliente || '—', 14, y2); y2 += 5;
+  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(80,80,80);
+  if (p.piva_cliente)      { doc.text('P.IVA: '+p.piva_cliente, 14, y2); y2+=5; }
+  if (p.email_cliente)     { doc.text('Email: '+p.email_cliente, 14, y2); y2+=5; }
+  if (p.sdi_cliente)       { doc.text('Cod. SDI: '+p.sdi_cliente, 14, y2); y2+=5; }
+  if (p.indirizzo_cliente) { doc.text(p.indirizzo_cliente, 14, y2); y2+=5; }
+  if (p.cap_cliente||p.citta_cliente) { doc.text(`${p.cap_cliente||''} ${p.citta_cliente||''}`.trim(), 14, y2); y2+=5; }
+
+  const rows = (p.voci||[]).map(v=>{
+    const tot=(parseFloat(v.qty)||0)*(parseFloat(v.prezzo)||0);
+    return [v.desc||'', String(v.qty), v.um||'', '€ '+fmt(v.prezzo), '€ '+fmt(tot)];
+  });
+  doc.autoTable({
+    startY: y2+8,
+    head: [['Descrizione','Qtà','U.M.','Prezzo unit.','Totale']],
+    body: rows,
+    styles: { fontSize:9, cellPadding:3 },
+    headStyles: { fillColor:[26,26,46], textColor:255, fontStyle:'bold' },
+    columnStyles: { 1:{halign:'right'}, 3:{halign:'right'}, 4:{halign:'right'} },
+    margin: { left:14, right:14 }
+  });
+
+  let yEnd = doc.lastAutoTable.finalY + 10;
+  const pageH = doc.internal.pageSize.getHeight();
+  if (yEnd > pageH-40) { doc.addPage(); yEnd=20; }
+  doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(90,90,90);
+  doc.text('Imponibile', 150, yEnd, {align:'right'}); doc.text('€ '+fmt(p.imponibile), 196, yEnd, {align:'right'}); yEnd+=6;
+  doc.text('IVA', 150, yEnd, {align:'right'}); doc.text('€ '+fmt(p.ivaTotal||p.iva_total), 196, yEnd, {align:'right'}); yEnd+=8;
+  doc.setDrawColor(26,26,46); doc.line(140, yEnd-4, 196, yEnd-4);
+  doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(26,26,46);
+  doc.text('TOTALE', 150, yEnd, {align:'right'}); doc.text('€ '+fmt(p.totale), 196, yEnd, {align:'right'});
+
+  if (p.note) {
+    yEnd+=14;
+    if (yEnd>pageH-30) { doc.addPage(); yEnd=20; }
+    doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.setTextColor(120,120,120);
+    doc.text('Note:', 14, yEnd);
+    doc.setFont('helvetica','normal'); doc.setTextColor(80,80,80);
+    doc.text(doc.splitTextToSize(p.note, 182), 14, yEnd+5);
+  }
+  const nomeFile = 'Preventivo_' + (p.numero||'senza_numero').replace(/[^a-zA-Z0-9\-_]/g,'_') + '.pdf';
+  doc.save(nomeFile);
+  notify('PDF generato ✓');
+}
+
+// =========================================================
+// UTILITY
+// =========================================================
+function fmt(n) { return parseFloat(n||0).toLocaleString('it-IT',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function esc(s)  { return (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function esc2(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function formatData(d) {
+  if (!d) return '';
+  try { const p=d.split('-'); if(p.length<3||!p[2]) return d; return `${p[2]}/${p[1]}/${p[0]}`; } catch(e) { return d; }
+}
+function notify(txt) {
+  const el = document.getElementById('notification');
+  el.textContent = txt; el.className = 'notification show';
+  setTimeout(()=>el.classList.remove('show'), 2800);
+}
+function notifyErr(txt) {
+  const el = document.getElementById('notification');
+  el.textContent = txt; el.className = 'notification error show';
+  setTimeout(()=>el.classList.remove('show'), 3500);
+}
+
+// =========================================================
+// AVVIO
+// =========================================================
+(async () => {
+  try {
+    await initDB();
+  } catch(e) {
+    document.querySelector('#global-loader p').textContent = 'Errore connessione DB: ' + e.message;
+    return;
+  }
+  document.getElementById('global-loader').style.display = 'none';
+
+  // Controlla sessione salvata
+  const sessione = leggiSessione();
+  if (sessione && sessione.id) {
+    // Verifica che l'utente esista ancora nel DB
+    try {
+      const rows = await tursoQuery('SELECT * FROM utenti WHERE id=?', [sessione.id]);
+      if (rows.length > 0) {
+        currentUser = rows[0];
+        salvaSessione(currentUser); // aggiorna con dati freschi
+        document.getElementById('login-screen').style.display = 'none';
+        document.getElementById('app').style.display = 'block';
+        await caricaIntestazione();
+        caricaImpostazioni();
+        // Seed history state iniziale così il tasto indietro non esce dall'app
+        history.replaceState({ tab: 'dashboard' }, '', '#dashboard');
+        showTab('dashboard');
+        return;
+      }
+    } catch(e) { /* sessione non valida, vai al login */ }
+    cancellaSessione();
+  }
+
+  document.getElementById('login-screen').style.display = 'flex';
+})();
+</script>
+</body>
+</html>
