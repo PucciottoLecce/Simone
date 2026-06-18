@@ -259,9 +259,13 @@
     /* Form grid: tutto a colonna singola */
     .form-grid { grid-template-columns: 1fr !important; gap: 12px; }
 
-    /* Tabella voci preventivo: scroll orizzontale */
-    .voci-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-    .voci-table { min-width: 600px; }
+    /* Tabella voci preventivo: no scroll, layout compatto */
+    .voci-table-wrap { overflow-x: visible; }
+    .voci-table { min-width: unset; width: 100%; }
+    .voci-table thead { display: none; }
+    .voci-table tbody tr { display: block; background: #fff; border: 1.5px solid #ebebeb; border-radius: 10px; margin-bottom: 10px; padding: 12px; }
+    .voci-table tbody tr td { display: block; border: none; padding: 4px 0; }
+    .voci-table .row-empty { display: none; }
 
     /* Lista preventivi */
     .prev-list-item { flex-wrap: wrap; gap: 8px; padding: 12px; }
@@ -438,6 +442,16 @@
             <input type="text" id="prev-piva-cliente" placeholder="IT12345678901" />
           </div>
         </div>
+        <div class="form-grid">
+          <div class="field">
+            <label>Email cliente</label>
+            <input type="email" id="prev-email-cliente" placeholder="cliente@esempio.it" />
+          </div>
+          <div class="field">
+            <label>Codice univoco / SDI</label>
+            <input type="text" id="prev-sdi-cliente" placeholder="es. ABCDEFG oppure PEC" />
+          </div>
+        </div>
         <div class="form-grid col3">
           <div class="field">
             <label>Indirizzo cliente</label>
@@ -459,12 +473,11 @@
         <table class="voci-table">
           <thead>
             <tr>
-              <th style="width:38%">Descrizione</th>
+              <th style="width:42%">Descrizione</th>
               <th style="width:10%">Qtà</th>
               <th style="width:12%">U.M.</th>
-              <th style="width:14%">Prezzo unit.</th>
-              <th style="width:10%">IVA %</th>
-              <th style="width:12%">Totale</th>
+              <th style="width:18%">Prezzo unit.</th>
+              <th style="width:14%">Totale</th>
               <th class="td-del"></th>
             </tr>
           </thead>
@@ -473,6 +486,17 @@
         <button onclick="addVoce()" style="background:none;border:1.5px dashed #ccc;border-radius:8px;padding:8px 18px;color:#888;font-size:13px;cursor:pointer;font-weight:600;margin-bottom:16px;">+ Aggiungi voce</button>
         <div class="totali-box">
           <div class="totali-inner">
+            <div class="totali-row" style="margin-bottom:10px;">
+              <span style="font-weight:600;color:#555;">IVA</span>
+              <select id="iva-globale" onchange="aggiornaVociTotali()" style="padding:6px 10px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:14px;font-family:inherit;background:#fff;color:#1a1a2e;font-weight:600;cursor:pointer;">
+                <option value="0">0% (Esente / Forfettario)</option>
+                <option value="4">4%</option>
+                <option value="5">5%</option>
+                <option value="10">10%</option>
+                <option value="22" selected>22%</option>
+                <option value="bollo">Marca da bollo (€ 2,00)</option>
+              </select>
+            </div>
             <div class="totali-row"><span>Imponibile</span><span id="tot-imponibile">€ 0,00</span></div>
             <div class="totali-row"><span>IVA</span><span id="tot-iva">€ 0,00</span></div>
             <div class="totali-row grand"><span>TOTALE</span><span id="tot-totale">€ 0,00</span></div>
@@ -635,6 +659,8 @@ async function initDB() {
     indirizzo_cliente TEXT,
     citta_cliente TEXT,
     cap_cliente TEXT,
+    email_cliente TEXT,
+    sdi_cliente TEXT,
     note TEXT,
     stato TEXT DEFAULT 'bozza',
     imponibile REAL DEFAULT 0,
@@ -643,6 +669,9 @@ async function initDB() {
     voci TEXT,
     created_at TEXT DEFAULT (datetime('now'))
   )`);
+  // Migrazione colonne nuove (per DB esistenti)
+  try { await tursoExec(`ALTER TABLE preventivi ADD COLUMN email_cliente TEXT`); } catch(e) {}
+  try { await tursoExec(`ALTER TABLE preventivi ADD COLUMN sdi_cliente TEXT`); } catch(e) {}
 
   // Inserisci utente default se non esiste
   const utenti = await tursoQuery('SELECT * FROM utenti LIMIT 1');
@@ -695,6 +724,7 @@ async function doLogin() {
       document.getElementById('app').style.display = 'block';
       await caricaIntestazione();
       caricaImpostazioni();
+      history.replaceState({ tab: 'dashboard' }, '', '#dashboard');
       showTab('dashboard');
     } else {
       document.getElementById('login-err').style.display = 'block';
@@ -719,6 +749,7 @@ function doLogout() {
 // =========================================================
 // TABS
 // =========================================================
+let _navFromPopstate = false;
 function showTab(t) {
   ['dashboard','lista','nuovo','scadenzario','intestazione','impostazioni'].forEach(s => {
     document.getElementById('section-'+s).style.display = s===t ? 'block' : 'none';
@@ -728,7 +759,19 @@ function showTab(t) {
   if (t==='lista') renderLista();
   if (t==='dashboard') renderDashboard();
   if (t==='scadenzario') renderScadenzario();
+  // Aggiorna history senza duplicare la stessa voce
+  if (!_navFromPopstate) {
+    const cur = history.state && history.state.tab;
+    if (cur !== t) history.pushState({ tab: t }, '', '#' + t);
+  }
 }
+
+window.addEventListener('popstate', function(e) {
+  const tab = (e.state && e.state.tab) || 'dashboard';
+  _navFromPopstate = true;
+  showTab(tab);
+  _navFromPopstate = false;
+});
 
 // Nuovo preventivo: chiede conferma se form ha modifiche non salvate
 function nuovoPreventivo() {
@@ -827,25 +870,35 @@ async function generaNumero() {
 // =========================================================
 // VOCI
 // =========================================================
+// Parsing unificato voci: supporta sia formato legacy array che nuovo {items, ivaGlobale}
+function parseVociRaw(raw) {
+  try {
+    const parsed = JSON.parse(raw || '[]');
+    if (Array.isArray(parsed)) return { items: parsed, ivaGlobale: '22' }; // legacy
+    return { items: parsed.items || [], ivaGlobale: parsed.ivaGlobale || '22' };
+  } catch(e) { return { items: [], ivaGlobale: '22' }; }
+}
+
 let vociData = [];
 
 function addVoce(v) {
-  vociData.push(v || { desc:'', qty:1, um:'pz', prezzo:0, iva:22 });
+  vociData.push(v || { desc:'', qty:1, um:'Mq', prezzo:0 });
   formDirty = true;
   renderVoci();
 }
 
 function aggiornaVociTotali() {
   let imponibile = 0, ivaTotal = 0;
+  const ivaVal = (document.getElementById('iva-globale')||{}).value || '22';
+  const isBollo = ivaVal === 'bollo';
+  const ivaRate = isBollo ? 0 : (parseFloat(ivaVal) || 0);
   vociData.forEach(v => {
     const qty = parseFloat(v.qty) || 0;
     const prezzo = parseFloat(v.prezzo) || 0;
-    const isBollo = v.iva === 'bollo';
-    const ivaRate = isBollo ? 0 : (parseFloat(v.iva) || 0);
     const tot = qty * prezzo;
     imponibile += tot;
-    ivaTotal += isBollo ? 2 : (tot * ivaRate / 100);
   });
+  ivaTotal = isBollo ? 2 : (imponibile * ivaRate / 100);
   document.getElementById('tot-imponibile').textContent = '€ ' + fmt(imponibile);
   document.getElementById('tot-iva').textContent = '€ ' + fmt(ivaTotal);
   document.getElementById('tot-totale').textContent = '€ ' + fmt(imponibile + ivaTotal);
@@ -902,17 +955,11 @@ function renderVoci() {
                   oninput="vociData[${i}].prezzo=parseFloat(this.value)||0;formDirty=true;aggiornaVociTotali()"
                   onfocus="this.style.borderColor='#1a1a2e'" onblur="this.style.borderColor='#e0e0e0'" />
               </div>
-              <div>
-                <label style="font-size:11px;font-weight:600;color:#777;text-transform:uppercase;display:block;margin-bottom:4px;">IVA</label>
-                <select onchange="vociData[${i}].iva=this.value==='bollo'?'bollo':parseFloat(this.value);formDirty=true;aggiornaVociTotali()"
-                  style="width:100%;padding:10px 12px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:16px;font-family:inherit;outline:none;background:#fff;">
-                  ${[0,4,5,10,22].map(r=>`<option value="${r}" ${v.iva==r?'selected':''}>${r}%</option>`).join('')}
-                  <option value="bollo" ${v.iva==='bollo'?'selected':''}>Bollo € 2,00</option>
-                </select>
+              <div style="display:flex;flex-direction:column;justify-content:flex-end;">
+                <div style="text-align:right;font-size:14px;font-weight:700;color:#1a1a2e;padding:10px 0;">
+                  Totale: € ${fmt(tot)}
+                </div>
               </div>
-            </div>
-            <div style="text-align:right;font-size:14px;font-weight:700;color:#1a1a2e;">
-              Totale: ${isBollo ? '+ € 2,00 bollo' : '€ ' + fmt(tot)}
             </div>
           </div>
         </td>
@@ -933,13 +980,7 @@ function renderVoci() {
         <td><input type="number" value="${qty}" min="0" step="any" oninput="vociData[${i}].qty=parseFloat(this.value)||0;formDirty=true;aggiornaVociTotali()" style="text-align:right;" /></td>
         <td><input type="text" value="${esc(v.um)}" oninput="vociData[${i}].um=this.value;formDirty=true" style="text-align:center;" /></td>
         <td><input type="number" value="${prezzo}" min="0" step="any" oninput="vociData[${i}].prezzo=parseFloat(this.value)||0;formDirty=true;aggiornaVociTotali()" style="text-align:right;" /></td>
-        <td>
-          <select onchange="vociData[${i}].iva=this.value==='bollo'?'bollo':parseFloat(this.value);formDirty=true;aggiornaVociTotali()">
-            ${[0,4,5,10,22].map(r=>`<option value="${r}" ${v.iva==r?'selected':''}>${r}%</option>`).join('')}
-            <option value="bollo" ${v.iva==='bollo'?'selected':''}>Marca da bollo (€ 2,00)</option>
-          </select>
-        </td>
-        <td class="td-totale" style="text-align:right;">${isBollo ? '(+ € 2,00 bollo)' : '€ ' + fmt(tot)}</td>
+        <td class="td-totale" style="text-align:right;">€ ${fmt(tot)}</td>
         <td class="td-del"><button class="btn-del-row" onclick="vociData.splice(${i},1);formDirty=true;renderVoci()" title="Rimuovi">×</button></td>
       `;
       tbody.appendChild(tr);
@@ -949,7 +990,7 @@ function renderVoci() {
     for (let e = 0; e < righeVuote; e++) {
       const emptyTr = document.createElement('tr');
       emptyTr.className = 'row-empty';
-      emptyTr.innerHTML = `<td></td><td></td><td></td><td></td><td></td><td></td><td></td>`;
+      emptyTr.innerHTML = `<td></td><td></td><td></td><td></td><td></td><td></td>`;
       tbody.appendChild(emptyTr);
     }
   }
@@ -971,6 +1012,8 @@ async function resetNuovo(prev) {
   document.getElementById('prev-indirizzo-cliente').value = prev ? (prev.indirizzo_cliente||'') : '';
   document.getElementById('prev-citta-cliente').value = prev ? (prev.citta_cliente||'') : '';
   document.getElementById('prev-cap-cliente').value = prev ? (prev.cap_cliente||'') : '';
+  document.getElementById('prev-email-cliente').value = prev ? (prev.email_cliente||'') : '';
+  document.getElementById('prev-sdi-cliente').value = prev ? (prev.sdi_cliente||'') : '';
   const NOTE_DEFAULT = `I lavori verranno eseguiti a regola d'arte e nel rispetto delle normative vigenti in materia edile e di sicurezza sul lavoro (D.Lgs. 81/2008 e s.m.i.).
 
 Regime fiscale: Operazione esente IVA ai sensi dell'art. 1, commi 54-89, Legge n. 190/2014 (Regime Forfettario). Non si applica la ritenuta d'acconto ai sensi dell'art. 1, c. 67, L. 190/2014.
@@ -982,6 +1025,9 @@ Modalità di pagamento: da concordare. Validità del preventivo: 30 giorni dalla
   // Pulisci errori validazione
   ['field-numero','field-cliente'].forEach(id => document.getElementById(id)?.classList.remove('error'));
   vociData = prev ? JSON.parse(JSON.stringify(prev.voci || [])) : [];
+  // Ripristina IVA globale (default 22%)
+  const ivaGlobEl = document.getElementById('iva-globale');
+  if (ivaGlobEl) ivaGlobEl.value = prev ? (prev.ivaGlobale || '22') : '22';
   if (!prev) addVoce();
   else renderVoci();
   formDirty = false;
@@ -1012,12 +1058,14 @@ async function salvaPreventivo() {
 
   const editId = document.getElementById('editing-id').value;
   let imponibile = 0, ivaTotal = 0;
+  const ivaVal = document.getElementById('iva-globale').value;
+  const isGlobBollo = ivaVal === 'bollo';
+  const ivaGlobRate = isGlobBollo ? 0 : (parseFloat(ivaVal) || 0);
   vociData.forEach(v => {
     const tot = (parseFloat(v.qty)||0) * (parseFloat(v.prezzo)||0);
     imponibile += tot;
-    if (v.iva === 'bollo') ivaTotal += 2;
-    else ivaTotal += tot * (parseFloat(v.iva)||0) / 100;
   });
+  ivaTotal = isGlobBollo ? 2 : (imponibile * ivaGlobRate / 100);
   const p = {
     id: editId || Date.now().toString(),
     numero: document.getElementById('prev-numero').value.trim(),
@@ -1028,18 +1076,20 @@ async function salvaPreventivo() {
     indirizzo_cliente: document.getElementById('prev-indirizzo-cliente').value.trim(),
     citta_cliente: document.getElementById('prev-citta-cliente').value.trim(),
     cap_cliente: document.getElementById('prev-cap-cliente').value.trim(),
+    email_cliente: document.getElementById('prev-email-cliente').value.trim(),
+    sdi_cliente: document.getElementById('prev-sdi-cliente').value.trim(),
     note: document.getElementById('prev-note').value.trim(),
     stato: document.getElementById('prev-stato').value,
-    voci: JSON.stringify(vociData),
+    voci: JSON.stringify({ items: vociData, ivaGlobale: ivaVal }),
     imponibile, ivaTotal, totale: imponibile + ivaTotal
   };
 
   try {
     await tursoExec(`INSERT OR REPLACE INTO preventivi
-      (id,numero,data,validita,cliente,piva_cliente,indirizzo_cliente,citta_cliente,cap_cliente,note,stato,voci,imponibile,iva_total,totale)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      (id,numero,data,validita,cliente,piva_cliente,indirizzo_cliente,citta_cliente,cap_cliente,email_cliente,sdi_cliente,note,stato,voci,imponibile,iva_total,totale)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [p.id,p.numero,p.data,p.validita,p.cliente,p.piva_cliente,p.indirizzo_cliente,
-       p.citta_cliente,p.cap_cliente,p.note,p.stato,p.voci,p.imponibile,p.ivaTotal,p.totale]);
+       p.citta_cliente,p.cap_cliente,p.email_cliente,p.sdi_cliente,p.note,p.stato,p.voci,p.imponibile,p.ivaTotal,p.totale]);
     formDirty = false;
     notify('Preventivo salvato ✓');
     showTab('lista');
@@ -1107,7 +1157,8 @@ async function loadPreventivi() {
   const rows = await tursoQuery('SELECT * FROM preventivi ORDER BY created_at DESC');
   return rows.map(r => ({
     ...r,
-    voci: (() => { try { return JSON.parse(r.voci||'[]'); } catch(e) { return []; } })(),
+    voci: (() => { const r = parseVociRaw(r.voci); return r.items; })(),
+    ivaGlobale: (() => { return parseVociRaw(r.voci).ivaGlobale; })(),
     totale: parseFloat(r.totale)||0,
     imponibile: parseFloat(r.imponibile)||0,
     ivaTotal: parseFloat(r.iva_total)||0
@@ -1118,9 +1169,11 @@ async function modificaPreventivo(id) {
   try {
     const rows = await tursoQuery('SELECT * FROM preventivi WHERE id=?', [id]);
     if (!rows[0]) return;
+    const parsed = parseVociRaw(rows[0].voci);
     const p = {
       ...rows[0],
-      voci: (() => { try { return JSON.parse(rows[0].voci||'[]'); } catch(e) { return []; } })()
+      voci: parsed.items,
+      ivaGlobale: parsed.ivaGlobale
     };
     showTab('nuovo');
     await resetNuovo(p);
@@ -1294,18 +1347,21 @@ function apriAnteprima(id) {
   if (p) showPreview(p);
   else {
     tursoQuery('SELECT * FROM preventivi WHERE id=?', [id]).then(rows => {
-      if (rows[0]) showPreview({ ...rows[0], voci: (() => { try { return JSON.parse(rows[0].voci||'[]'); } catch(e) { return []; } })() });
+      if (rows[0]) { const pv = parseVociRaw(rows[0].voci); showPreview({ ...rows[0], voci: pv.items, ivaGlobale: pv.ivaGlobale }); }
     });
   }
 }
 
 function buildPrevCorrente(int) {
   let imponibile=0, ivaTotal=0;
+  const ivaVal = document.getElementById('iva-globale').value;
+  const isBollo = ivaVal === 'bollo';
+  const ivaRate = isBollo ? 0 : (parseFloat(ivaVal) || 0);
   vociData.forEach(v=>{
     const tot=(parseFloat(v.qty)||0)*(parseFloat(v.prezzo)||0);
     imponibile+=tot;
-    if (v.iva==='bollo') ivaTotal+=2; else ivaTotal+=tot*(parseFloat(v.iva)||0)/100;
   });
+  ivaTotal = isBollo ? 2 : (imponibile * ivaRate / 100);
   return {
     numero: document.getElementById('prev-numero').value,
     data: document.getElementById('prev-data').value,
@@ -1317,6 +1373,7 @@ function buildPrevCorrente(int) {
     cap_cliente: document.getElementById('prev-cap-cliente').value,
     note: document.getElementById('prev-note').value,
     voci: vociData,
+    ivaGlobale: ivaVal,
     imponibile, ivaTotal, totale: imponibile+ivaTotal,
     intestazione: int
   };
@@ -1349,18 +1406,19 @@ function showPreview(p) {
         <p>
           <strong>${esc2(p.cliente||'—')}</strong><br>
           ${p.piva_cliente?'P.IVA: '+esc2(p.piva_cliente)+'<br>':''}
+          ${p.email_cliente?'Email: '+esc2(p.email_cliente)+'<br>':''}
+          ${p.sdi_cliente?'Cod. SDI: '+esc2(p.sdi_cliente)+'<br>':''}
           ${p.indirizzo_cliente?esc2(p.indirizzo_cliente)+'<br>':''}
           ${(p.cap_cliente||p.citta_cliente)?(esc2(p.cap_cliente||'')+' '+esc2(p.citta_cliente||'')).trim():''}
         </p>
       </div>
       <table class="doc-table">
         <thead><tr>
-          <th style="width:42%">Descrizione</th>
+          <th style="width:44%">Descrizione</th>
           <th style="width:8%;text-align:right">Qtà</th>
           <th style="width:8%">U.M.</th>
-          <th style="width:14%;text-align:right">Prezzo unit.</th>
-          <th style="width:8%;text-align:right">IVA</th>
-          <th style="width:14%;text-align:right">Totale</th>
+          <th style="width:18%;text-align:right">Prezzo unit.</th>
+          <th style="width:16%;text-align:right">Totale</th>
         </tr></thead>
         <tbody>
           ${(p.voci||[]).map(v=>{
@@ -1370,7 +1428,6 @@ function showPreview(p) {
               <td style="text-align:right">${v.qty}</td>
               <td>${esc2(v.um||'')}</td>
               <td style="text-align:right">€ ${fmt(v.prezzo)}</td>
-              <td style="text-align:right">${v.iva}%</td>
               <td style="text-align:right">€ ${fmt(tot)}</td>
             </tr>`;
           }).join('')}
@@ -1379,7 +1436,7 @@ function showPreview(p) {
       <div class="doc-totali">
         <div class="doc-totali-inner">
           <div class="doc-tot-row"><span>Imponibile</span><span>€ ${fmt(p.imponibile)}</span></div>
-          <div class="doc-tot-row"><span>IVA</span><span>€ ${fmt(p.ivaTotal||p.iva_total)}</span></div>
+          <div class="doc-tot-row"><span>IVA ${p.ivaGlobale === 'bollo' ? '(Bollo)' : (p.ivaGlobale||'22')+'%'}</span><span>€ ${fmt(p.ivaTotal||p.iva_total)}</span></div>
           <div class="doc-tot-row grand"><span>TOTALE</span><span>€ ${fmt(p.totale)}</span></div>
         </div>
       </div>
@@ -1440,20 +1497,22 @@ function esportaPDF(id) {
   doc.text(p.cliente || '—', 14, y2); y2 += 5;
   doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(80,80,80);
   if (p.piva_cliente)      { doc.text('P.IVA: '+p.piva_cliente, 14, y2); y2+=5; }
+  if (p.email_cliente)     { doc.text('Email: '+p.email_cliente, 14, y2); y2+=5; }
+  if (p.sdi_cliente)       { doc.text('Cod. SDI: '+p.sdi_cliente, 14, y2); y2+=5; }
   if (p.indirizzo_cliente) { doc.text(p.indirizzo_cliente, 14, y2); y2+=5; }
   if (p.cap_cliente||p.citta_cliente) { doc.text(`${p.cap_cliente||''} ${p.citta_cliente||''}`.trim(), 14, y2); y2+=5; }
 
   const rows = (p.voci||[]).map(v=>{
     const tot=(parseFloat(v.qty)||0)*(parseFloat(v.prezzo)||0);
-    return [v.desc||'', String(v.qty), v.um||'', '€ '+fmt(v.prezzo), (v.iva||0)+'%', '€ '+fmt(tot)];
+    return [v.desc||'', String(v.qty), v.um||'', '€ '+fmt(v.prezzo), '€ '+fmt(tot)];
   });
   doc.autoTable({
     startY: y2+8,
-    head: [['Descrizione','Qtà','U.M.','Prezzo unit.','IVA','Totale']],
+    head: [['Descrizione','Qtà','U.M.','Prezzo unit.','Totale']],
     body: rows,
     styles: { fontSize:9, cellPadding:3 },
     headStyles: { fillColor:[26,26,46], textColor:255, fontStyle:'bold' },
-    columnStyles: { 1:{halign:'right'}, 3:{halign:'right'}, 4:{halign:'right'}, 5:{halign:'right'} },
+    columnStyles: { 1:{halign:'right'}, 3:{halign:'right'}, 4:{halign:'right'} },
     margin: { left:14, right:14 }
   });
 
@@ -1526,6 +1585,8 @@ function notifyErr(txt) {
         document.getElementById('app').style.display = 'block';
         await caricaIntestazione();
         caricaImpostazioni();
+        // Seed history state iniziale così il tasto indietro non esce dall'app
+        history.replaceState({ tab: 'dashboard' }, '', '#dashboard');
         showTab('dashboard');
         return;
       }
