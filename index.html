@@ -55,6 +55,9 @@
 
   /* TABS */
   .tabs { background: #fff; border-bottom: 1.5px solid #ebebeb; padding: 0 32px; display: flex; gap: 0; }
+  .tab-altro-mobile { display: none; }
+  .menu-altro-overlay { display: none; }
+  .menu-altro-tendina { display: none; }
   .tab { padding: 14px 22px; font-size: 14px; font-weight: 600; color: #888; cursor: pointer; border-bottom: 2.5px solid transparent; transition: all 0.2s; }
   .tab.active { color: #1a1a2e; border-bottom-color: #1a1a2e; }
   .tab:hover:not(.active) { color: #444; }
@@ -211,7 +214,7 @@
 
   /* ===================== MOBILE ===================== */
   @media (max-width: 640px) {
-    /* Nav: bottom bar su mobile */
+    /* Nav: bottom bar su mobile, solo 4 voci principali + Altro, ben visibili */
     .tabs {
       position: fixed;
       bottom: 0; left: 0; right: 0;
@@ -222,19 +225,20 @@
       z-index: 100;
       background: #fff;
       justify-content: space-around;
-      box-shadow: 0 -2px 12px rgba(0,0,0,0.08);
+      box-shadow: 0 -4px 16px rgba(0,0,0,0.1);
     }
     .tab {
       flex: 1;
-      padding: 10px 4px 8px;
-      font-size: 10px;
+      padding: 12px 2px 10px;
+      font-size: 12.5px;
+      font-weight: 600;
       text-align: center;
       border-bottom: none;
-      border-top: 2.5px solid transparent;
+      border-top: 3px solid transparent;
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 2px;
+      gap: 4px;
       line-height: 1.2;
     }
     .tab.active {
@@ -242,6 +246,41 @@
       border-top-color: #1a1a2e;
       color: #1a1a2e;
     }
+    /* Nasconde dalla barra le voci secondarie: finiscono nel menu "Altro" */
+    #tab-intestazione, #tab-impostazioni { display: none; }
+    .tab-altro-mobile { display: flex; }
+    .tab-altro-mobile span { display: block; }
+
+    /* Tendina "Altro": si apre verso l'alto, sopra la bottom bar */
+    .menu-altro-overlay.open {
+      display: block;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.35);
+      z-index: 101;
+    }
+    .menu-altro-tendina.open {
+      display: block;
+      position: fixed;
+      left: 12px; right: 12px;
+      bottom: calc(56px + env(safe-area-inset-bottom, 0px) + 12px);
+      background: #fff;
+      border-radius: 14px;
+      box-shadow: 0 -4px 24px rgba(0,0,0,0.18);
+      z-index: 102;
+      overflow: hidden;
+      animation: menuAltroIn 0.18s ease-out;
+    }
+    @keyframes menuAltroIn { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform: translateY(0); } }
+    .menu-altro-item {
+      padding: 16px 20px;
+      font-size: 15px;
+      font-weight: 600;
+      color: #1a1a2e;
+      border-bottom: 1px solid #f0f0f0;
+      cursor: pointer;
+    }
+    .menu-altro-item:last-child { border-bottom: none; }
+    .menu-altro-item:active { background: #f5f5f0; }
 
     /* Header banner */
     .banner { padding: 12px 16px; flex-direction: column; gap: 8px; }
@@ -252,7 +291,7 @@
     /* Main content */
     .main-content {
       padding: 16px;
-      padding-bottom: 80px; /* spazio per bottom nav */
+      padding-bottom: 88px; /* spazio per bottom nav più grande */
       max-width: 100%;
     }
 
@@ -356,6 +395,14 @@
     <div class="tab" id="tab-scadenzario" onclick="showTab('scadenzario')">⏰ Scadenzario</div>
     <div class="tab" id="tab-intestazione" onclick="showTab('intestazione')">🏢 Intestazione</div>
     <div class="tab" id="tab-impostazioni" onclick="showTab('impostazioni')">⚙️ Impostazioni</div>
+    <div class="tab tab-altro-mobile" id="tab-altro" onclick="toggleMenuAltro()">⋯<span>Altro</span></div>
+  </div>
+
+  <!-- Tendina "Altro" per smartphone: raccoglie le voci secondarie del menu -->
+  <div class="menu-altro-overlay" id="menu-altro-overlay" onclick="chiudiMenuAltro()"></div>
+  <div class="menu-altro-tendina" id="menu-altro-tendina">
+    <div class="menu-altro-item" onclick="showTab('intestazione');chiudiMenuAltro()">🏢 Intestazione</div>
+    <div class="menu-altro-item" onclick="showTab('impostazioni');chiudiMenuAltro()">⚙️ Impostazioni</div>
   </div>
 
   <div class="main-content">
@@ -558,6 +605,13 @@
         <div class="form-grid col1">
           <div class="field"><label>Prefisso numero preventivo</label><input type="text" id="int-prefisso" placeholder="es. PREV- oppure 2025-" /></div>
         </div>
+        <div class="form-grid col1">
+          <div class="field">
+            <label>Note precompilate per i nuovi preventivi</label>
+            <textarea id="int-note_default" rows="6" placeholder="Questo testo apparirà automaticamente nel campo Note ogni volta che crei un nuovo preventivo. Lascia vuoto per usare il testo standard."></textarea>
+            <p style="font-size:12px;color:#999;margin-top:6px;">Modificabile comunque per ogni singolo preventivo. Lasciando vuoto questo campo verrà usato il testo standard predefinito.</p>
+          </div>
+        </div>
         <div class="action-bar" style="margin-top:8px;">
           <button class="btn-large" style="background:#1a1a2e;color:#fff;" onclick="salvaIntestazione()" id="btn-salva-int">💾 Salva intestazione</button>
         </div>
@@ -648,8 +702,11 @@ async function initDB() {
   await tursoExec(`CREATE TABLE IF NOT EXISTS intestazione (
     id INTEGER PRIMARY KEY,
     ragione TEXT, piva TEXT, indirizzo TEXT, citta TEXT, cap TEXT,
-    tel TEXT, email TEXT, web TEXT, iban TEXT, sdi TEXT, prefisso TEXT
+    tel TEXT, email TEXT, web TEXT, iban TEXT, sdi TEXT, prefisso TEXT,
+    note_default TEXT
   )`);
+  // Migrazione per DB già esistenti creati prima dell'introduzione del campo
+  try { await tursoExec(`ALTER TABLE intestazione ADD COLUMN note_default TEXT`); } catch(e) {}
   await tursoExec(`CREATE TABLE IF NOT EXISTS preventivi (
     id TEXT PRIMARY KEY,
     numero TEXT NOT NULL,
@@ -774,6 +831,9 @@ function showTab(t) {
     const tab = document.getElementById('tab-'+s);
     if (tab) tab.classList.toggle('active', s===t);
   });
+  // Il pulsante "Altro" (mobile) si evidenzia quando si è su Intestazione o Impostazioni
+  const tabAltro = document.getElementById('tab-altro');
+  if (tabAltro) tabAltro.classList.toggle('active', t==='intestazione' || t==='impostazioni');
   if (t==='lista') renderLista();
   if (t==='dashboard') renderDashboard();
   if (t==='scadenzario') renderScadenzario();
@@ -782,6 +842,20 @@ function showTab(t) {
     const cur = history.state && history.state.tab;
     if (cur !== t) history.pushState({ tab: t }, '', '#' + t);
   }
+}
+
+// Tendina "Altro" (mobile): mostra Intestazione/Impostazioni
+function toggleMenuAltro() {
+  const tendina = document.getElementById('menu-altro-tendina');
+  const overlay = document.getElementById('menu-altro-overlay');
+  const aperta = tendina.classList.contains('open');
+  if (aperta) { chiudiMenuAltro(); return; }
+  tendina.classList.add('open');
+  overlay.classList.add('open');
+}
+function chiudiMenuAltro() {
+  document.getElementById('menu-altro-tendina').classList.remove('open');
+  document.getElementById('menu-altro-overlay').classList.remove('open');
 }
 
 window.addEventListener('popstate', function(e) {
@@ -813,7 +887,7 @@ function annullaModifica() {
 // =========================================================
 // INTESTAZIONE
 // =========================================================
-const INT_FIELDS = ['ragione','piva','indirizzo','citta','cap','tel','email','web','iban','sdi','prefisso'];
+const INT_FIELDS = ['ragione','piva','indirizzo','citta','cap','tel','email','web','iban','sdi','prefisso','note_default'];
 
 async function caricaIntestazione() {
   try {
@@ -854,9 +928,9 @@ async function salvaIntestazione() {
   const btn = document.getElementById('btn-salva-int');
   btn.disabled = true; btn.textContent = 'Salvataggio…';
   try {
-    await tursoExec(`INSERT OR REPLACE INTO intestazione (id,ragione,piva,indirizzo,citta,cap,tel,email,web,iban,sdi,prefisso)
-      VALUES (1,?,?,?,?,?,?,?,?,?,?,?)`,
-      [d.ragione,d.piva,d.indirizzo,d.citta,d.cap,d.tel,d.email,d.web,d.iban,d.sdi,d.prefisso]);
+    await tursoExec(`INSERT OR REPLACE INTO intestazione (id,ragione,piva,indirizzo,citta,cap,tel,email,web,iban,sdi,prefisso,note_default)
+      VALUES (1,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      [d.ragione,d.piva,d.indirizzo,d.citta,d.cap,d.tel,d.email,d.web,d.iban,d.sdi,d.prefisso,d.note_default]);
     intestazioneCache = d;
     aggiornaBanner(d);
     notify('Intestazione salvata ✓');
@@ -1075,7 +1149,7 @@ Il committente è tenuto al versamento dell'imposta di bollo di € 2,00 ai sens
 Modalità di pagamento: da concordare. Validità del preventivo: 30 giorni dalla data di emissione.
 
 Il presente preventivo potrà essere soggetto a variazioni in base alle lavorazioni effettivamente necessarie e/o a eventuali richieste aggiuntive del cliente.`;
-  document.getElementById('prev-note').value = prev ? (prev.note||'') : NOTE_DEFAULT;
+  document.getElementById('prev-note').value = prev ? (prev.note||'') : (intestazioneCache.note_default || NOTE_DEFAULT);
   document.getElementById('prev-stato').value = prev ? (prev.stato||'bozza') : 'bozza';
   // Pulisci errori validazione
   ['field-numero','field-cliente'].forEach(id => document.getElementById(id)?.classList.remove('error'));
@@ -1507,10 +1581,22 @@ function showPreview(p) {
     </div>`;
   document.getElementById('preview-body').innerHTML = html;
   document.getElementById('preview-overlay').classList.add('open');
+  // Pusha una entry di history dedicata: così il tasto indietro su mobile
+  // chiude l'anteprima invece di navigare alla pagina/tab sottostante.
+  _previewOpenViaHistory = true;
+  history.pushState({ preview: true }, '', location.hash || '#');
 }
 
 function closePreview() {
   document.getElementById('preview-overlay').classList.remove('open');
+  // Se l'anteprima era stata aperta con una entry di history dedicata
+  // e la chiusura avviene dal pulsante (non dal tasto indietro),
+  // consumiamo quella entry tornando indietro "silenziosamente".
+  if (_previewOpenViaHistory) {
+    _previewOpenViaHistory = false;
+    _chiudendoPreviewDaBottone = true;
+    history.back();
+  }
 }
 
 // =========================================================
