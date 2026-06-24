@@ -751,7 +751,24 @@ function doLogout() {
 // TABS
 // =========================================================
 let _navFromPopstate = false;
+let _forzaUscitaNuovo = false; // bypassa il controllo dirty quando già confermato altrove
+
 function showTab(t) {
+  // Protezione dati non salvati: se sto lasciando la tab "nuovo" con
+  // modifiche in corso, chiedo conferma PRIMA di nascondere la sezione.
+  const sectionNuovo = document.getElementById('section-nuovo');
+  const eraSuNuovo = sectionNuovo && sectionNuovo.style.display === 'block';
+  if (eraSuNuovo && t !== 'nuovo' && formDirty && !_forzaUscitaNuovo) {
+    const vuoleUscire = confirm('Hai modifiche non salvate nel preventivo. Vuoi davvero uscire? I dati compilati andranno persi.');
+    if (!vuoleUscire) {
+      // Resta sulla tab nuovo: se la chiamata arrivava da popstate,
+      // ripristiniamo la entry corrispondente in history.
+      if (_navFromPopstate) history.pushState({ tab: 'nuovo' }, '', '#nuovo');
+      return;
+    }
+    formDirty = false;
+  }
+
   ['dashboard','lista','nuovo','scadenzario','intestazione','impostazioni'].forEach(s => {
     document.getElementById('section-'+s).style.display = s===t ? 'block' : 'none';
     const tab = document.getElementById('tab-'+s);
@@ -769,40 +786,27 @@ function showTab(t) {
 
 window.addEventListener('popstate', function(e) {
   const tab = (e.state && e.state.tab) || 'dashboard';
-  const eraSuNuovoConModifiche = formDirty && document.getElementById('section-nuovo').style.display === 'block';
-
-  if (eraSuNuovoConModifiche) {
-    const vuoleUscire = confirm('Hai modifiche non salvate nel preventivo. Vuoi davvero uscire? I dati compilati andranno persi.');
-    if (!vuoleUscire) {
-      // L'utente vuole restare: rimettiamo la entry "nuovo" in history
-      // così il preventivo resta visibile e compilato, senza perdere nulla.
-      history.pushState({ tab: 'nuovo' }, '', '#nuovo');
-      return;
-    }
-    // Confermato: l'utente accetta di perdere le modifiche
-    formDirty = false;
-  }
-
   _navFromPopstate = true;
   showTab(tab);
   _navFromPopstate = false;
 });
 
-// Nuovo preventivo: chiede conferma se form ha modifiche non salvate
+// Nuovo preventivo: chiede conferma se form ha modifiche non salvate.
+// Il controllo "sto lasciando nuovo con modifiche" lo fa già showTab();
+// qui serve solo gestire il caso speciale: sono GIÀ sulla tab nuovo
+// e voglio resettarla per iniziarne un altro da zero.
 function nuovoPreventivo() {
-  if (formDirty) {
+  const giaSuNuovo = document.getElementById('section-nuovo').style.display === 'block';
+  if (giaSuNuovo && formDirty) {
     if (!confirm('Hai modifiche non salvate. Vuoi davvero creare un nuovo preventivo?')) return;
+    formDirty = false; // già confermato qui, evita che showTab richieda conferma una seconda volta
   }
   showTab('nuovo');
   resetNuovo();
 }
 
-// Annulla: torna alla lista con conferma se dirty
+// Annulla: torna alla lista con conferma se dirty (gestita da showTab)
 function annullaModifica() {
-  if (formDirty) {
-    if (!confirm('Hai modifiche non salvate. Vuoi annullare?')) return;
-  }
-  formDirty = false;
   showTab('lista');
 }
 
