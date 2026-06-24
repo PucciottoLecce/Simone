@@ -143,7 +143,7 @@
   .doc-totali-inner { min-width: 240px; }
   .doc-tot-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; color: #555; }
   .doc-tot-row.grand { font-size: 17px; font-weight: 800; color: #1a1a2e; padding-top: 10px; border-top: 2px solid #1a1a2e; margin-top: 4px; }
-  .doc-note { margin-top: 32px; font-size: 12px; color: #888; border-top: 1px solid #f0f0f0; padding-top: 16px; }
+  .doc-note { margin-top: 32px; font-size: 12px; color: #888; border-top: 1px solid #f0f0f0; padding-top: 16px; white-space: pre-line; }
   .doc-footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid #e0e0e0; display: flex; justify-content: space-between; font-size: 10px; color: #bbb; }
   .empty-list { text-align: center; padding: 48px 0; color: #bbb; font-size: 15px; }
 
@@ -473,11 +473,12 @@
         <table class="voci-table">
           <thead>
             <tr>
-              <th style="width:42%">Descrizione</th>
-              <th style="width:10%">Qtà</th>
-              <th style="width:12%">U.M.</th>
-              <th style="width:18%">Prezzo unit.</th>
-              <th style="width:14%">Totale</th>
+              <th style="width:38%">Descrizione</th>
+              <th style="width:9%">Qtà</th>
+              <th style="width:11%">U.M.</th>
+              <th style="width:16%">Prezzo unit.</th>
+              <th style="width:13%">Totale</th>
+              <th class="td-ordine" style="width:9%"></th>
               <th class="td-del"></th>
             </tr>
           </thead>
@@ -768,6 +769,20 @@ function showTab(t) {
 
 window.addEventListener('popstate', function(e) {
   const tab = (e.state && e.state.tab) || 'dashboard';
+  const eraSuNuovoConModifiche = formDirty && document.getElementById('section-nuovo').style.display === 'block';
+
+  if (eraSuNuovoConModifiche) {
+    const vuoleUscire = confirm('Hai modifiche non salvate nel preventivo. Vuoi davvero uscire? I dati compilati andranno persi.');
+    if (!vuoleUscire) {
+      // L'utente vuole restare: rimettiamo la entry "nuovo" in history
+      // così il preventivo resta visibile e compilato, senza perdere nulla.
+      history.pushState({ tab: 'nuovo' }, '', '#nuovo');
+      return;
+    }
+    // Confermato: l'utente accetta di perdere le modifiche
+    formDirty = false;
+  }
+
   _navFromPopstate = true;
   showTab(tab);
   _navFromPopstate = false;
@@ -887,6 +902,25 @@ function addVoce(v) {
   renderVoci();
 }
 
+// Inserisce una nuova voce vuota subito DOPO la posizione i (così l'utente
+// decide esattamente dove va a finire, invece di trovarsela sempre in fondo)
+function inserisciVoceA(i) {
+  vociData.splice(i + 1, 0, { desc:'', qty:1, um:'Mq', prezzo:0 });
+  formDirty = true;
+  renderVoci();
+}
+
+// Sposta la voce in posizione i su (-1) o giù (+1) di una posizione
+function spostaVoce(i, dir) {
+  const j = i + dir;
+  if (j < 0 || j >= vociData.length) return;
+  const tmp = vociData[i];
+  vociData[i] = vociData[j];
+  vociData[j] = tmp;
+  formDirty = true;
+  renderVoci();
+}
+
 function aggiornaVociTotali() {
   let imponibile = 0, ivaTotal = 0;
   const ivaVal = (document.getElementById('iva-globale')||{}).value || '22';
@@ -925,7 +959,12 @@ function renderVoci() {
           <div style="padding:12px;background:#fff;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
               <span style="font-size:11px;font-weight:700;color:#888;text-transform:uppercase;">Voce ${i+1}</span>
-              <button onclick="vociData.splice(${i},1);formDirty=true;renderVoci()" style="background:none;border:none;color:#e74c3c;font-size:20px;cursor:pointer;line-height:1;padding:0 4px;">×</button>
+              <div style="display:flex;gap:6px;align-items:center;">
+                <button onclick="spostaVoce(${i},-1)" title="Sposta su" ${i===0?'disabled':''} style="background:none;border:1px solid #e0e0e0;border-radius:6px;cursor:${i===0?'default':'pointer'};color:${i===0?'#ddd':'#666'};font-size:14px;width:28px;height:28px;line-height:1;">▲</button>
+                <button onclick="spostaVoce(${i},1)" title="Sposta giù" ${i===vociData.length-1?'disabled':''} style="background:none;border:1px solid #e0e0e0;border-radius:6px;cursor:${i===vociData.length-1?'default':'pointer'};color:${i===vociData.length-1?'#ddd':'#666'};font-size:14px;width:28px;height:28px;line-height:1;">▼</button>
+                <button onclick="inserisciVoceA(${i})" title="Inserisci voce qui sotto" style="background:none;border:1px solid #e0e0e0;border-radius:6px;cursor:pointer;color:#27ae60;font-size:16px;width:28px;height:28px;line-height:1;font-weight:700;">+</button>
+                <button onclick="vociData.splice(${i},1);formDirty=true;renderVoci()" style="background:none;border:none;color:#e74c3c;font-size:20px;cursor:pointer;line-height:1;padding:0 4px;">×</button>
+              </div>
             </div>
             <div style="margin-bottom:8px;">
               <label style="font-size:11px;font-weight:600;color:#777;text-transform:uppercase;display:block;margin-bottom:4px;">Descrizione</label>
@@ -984,6 +1023,13 @@ function renderVoci() {
         <td><input type="text" value="${esc(v.um)}" oninput="vociData[${i}].um=this.value;formDirty=true" style="text-align:center;" /></td>
         <td><input type="number" value="${prezzo}" min="0" step="any" oninput="vociData[${i}].prezzo=parseFloat(this.value)||0;formDirty=true;aggiornaVociTotali()" style="text-align:right;" /></td>
         <td class="td-totale" style="text-align:right;">€ ${fmt(tot)}</td>
+        <td class="td-ordine">
+          <div style="display:flex;gap:2px;justify-content:center;">
+            <button onclick="spostaVoce(${i},-1)" title="Sposta su" ${i===0?'disabled':''} style="background:none;border:1px solid #e0e0e0;border-radius:5px;cursor:${i===0?'default':'pointer'};color:${i===0?'#ddd':'#666'};font-size:12px;width:24px;height:24px;line-height:1;">▲</button>
+            <button onclick="spostaVoce(${i},1)" title="Sposta giù" ${i===vociData.length-1?'disabled':''} style="background:none;border:1px solid #e0e0e0;border-radius:5px;cursor:${i===vociData.length-1?'default':'pointer'};color:${i===vociData.length-1?'#ddd':'#666'};font-size:12px;width:24px;height:24px;line-height:1;">▼</button>
+            <button onclick="inserisciVoceA(${i})" title="Inserisci voce qui sotto" style="background:none;border:1px solid #e0e0e0;border-radius:5px;cursor:pointer;color:#27ae60;font-size:14px;width:24px;height:24px;line-height:1;font-weight:700;">+</button>
+          </div>
+        </td>
         <td class="td-del"><button class="btn-del-row" onclick="vociData.splice(${i},1);formDirty=true;renderVoci()" title="Rimuovi">×</button></td>
       `;
       tbody.appendChild(tr);
@@ -993,7 +1039,7 @@ function renderVoci() {
     for (let e = 0; e < righeVuote; e++) {
       const emptyTr = document.createElement('tr');
       emptyTr.className = 'row-empty';
-      emptyTr.innerHTML = `<td></td><td></td><td></td><td></td><td></td><td></td>`;
+      emptyTr.innerHTML = `<td></td><td></td><td></td><td></td><td></td><td></td><td></td>`;
       tbody.appendChild(emptyTr);
     }
   }
@@ -1022,7 +1068,9 @@ async function resetNuovo(prev) {
 Regime fiscale: Operazione esente IVA ai sensi dell'art. 1, commi 54-89, Legge n. 190/2014 (Regime Forfettario). Non si applica la ritenuta d'acconto ai sensi dell'art. 1, c. 67, L. 190/2014.
 Il committente è tenuto al versamento dell'imposta di bollo di € 2,00 ai sensi del D.P.R. 642/1972 (per importi superiori a € 77,47).
 
-Modalità di pagamento: da concordare. Validità del preventivo: 30 giorni dalla data di emissione.`;
+Modalità di pagamento: da concordare. Validità del preventivo: 30 giorni dalla data di emissione.
+
+Il presente preventivo potrà essere soggetto a variazioni in base alle lavorazioni effettivamente necessarie e/o a eventuali richieste aggiuntive del cliente.`;
   document.getElementById('prev-note').value = prev ? (prev.note||'') : NOTE_DEFAULT;
   document.getElementById('prev-stato').value = prev ? (prev.stato||'bozza') : 'bozza';
   // Pulisci errori validazione
