@@ -1,4 +1,4 @@
-name = "preventivi-pro-worker"
+name = "simone"
 main = "worker.js"
 compatibility_date = "2024-01-01"
 
