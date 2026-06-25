@@ -319,8 +319,17 @@
     .totali-box { flex-direction: column; }
     .totali-inner { min-width: unset; width: 100%; }
 
-    /* Preview overlay */
-    .preview-box { width: 100%; max-width: 100%; border-radius: 0; max-height: 100vh; }
+    /* Preview overlay: altezza sicura su mobile (100vh non considera le barre
+       dinamiche del browser); nasconde la bottom-nav mentre l'anteprima è aperta */
+    .preview-box { width: 100%; max-width: 100%; border-radius: 0; max-height: 100vh; max-height: 100dvh; }
+    body:has(.preview-overlay.open) .tabs,
+    body.preview-aperta .tabs { display: none !important; }
+    .preview-topbar {
+      padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 12px;
+      flex-shrink: 0;
+    }
+    .preview-topbar span { font-size: 14px; }
+    .preview-topbar .btn-sm { padding: 10px 14px; font-size: 13.5px; }
 
     /* Login card */
     .login-card { width: 90vw; padding: 32px 24px; }
@@ -763,6 +772,19 @@ let intestazioneCache = {};
 let preventiviCache = [];
 let formDirty = false; // traccia modifiche non salvate
 
+// Marca formDirty=true alla PRIMA modifica di un qualsiasi campo del form
+// "nuovo preventivo" — dati cliente, numero, date, note, voci, IVA, stato...
+// Delegazione sul document: copre anche i campi delle voci generati dinamicamente,
+// senza bisogno di aggiungere oninput a ogni singolo input uno per uno.
+['input', 'change'].forEach(evt => {
+  document.addEventListener(evt, function(e) {
+    const sectionNuovo = document.getElementById('section-nuovo');
+    if (sectionNuovo && sectionNuovo.contains(e.target)) {
+      formDirty = true;
+    }
+  }, true); // capture: intercetta l'evento anche se un handler interno lo blocca dopo
+});
+
 // =========================================================
 // LOGIN / LOGOUT
 // =========================================================
@@ -809,6 +831,8 @@ function doLogout() {
 // =========================================================
 let _navFromPopstate = false;
 let _forzaUscitaNuovo = false; // bypassa il controllo dirty quando già confermato altrove
+let _previewOpenViaHistory = false;   // true quando l'anteprima ha una entry di history dedicata
+let _chiudendoPreviewDaBottone = false; // true quando closePreview() ha già gestito lei stessa il back()
 
 function showTab(t) {
   // Protezione dati non salvati: se sto lasciando la tab "nuovo" con
@@ -859,6 +883,25 @@ function chiudiMenuAltro() {
 }
 
 window.addEventListener('popstate', function(e) {
+  // Caso 1: il back() è stato avviato da closePreview() stessa (click su "Chiudi").
+  // L'overlay è già stato chiuso: consumiamo solo questa entry di history, senza
+  // toccare la tab sottostante (altrimenti cambieremmo pagina inutilmente).
+  if (_chiudendoPreviewDaBottone) {
+    _chiudendoPreviewDaBottone = false;
+    return;
+  }
+
+  // Caso 2: l'anteprima è aperta e l'utente ha premuto il tasto indietro fisico
+  // (mobile o desktop). Chiudiamo SOLO l'overlay: la pagina sotto resta dov'era.
+  const previewAperta = document.getElementById('preview-overlay').classList.contains('open');
+  if (previewAperta) {
+    document.getElementById('preview-overlay').classList.remove('open');
+    document.body.classList.remove('preview-aperta');
+    _previewOpenViaHistory = false;
+    return;
+  }
+
+  // Caso 3: navigazione normale tra le tab dell'app.
   const tab = (e.state && e.state.tab) || 'dashboard';
   _navFromPopstate = true;
   showTab(tab);
@@ -958,6 +1001,7 @@ async function prossNumero() {
 
 async function generaNumero() {
   document.getElementById('prev-numero').value = await prossNumero();
+  formDirty = true;
 }
 
 // =========================================================
@@ -1581,6 +1625,7 @@ function showPreview(p) {
     </div>`;
   document.getElementById('preview-body').innerHTML = html;
   document.getElementById('preview-overlay').classList.add('open');
+  document.body.classList.add('preview-aperta'); // fallback per browser senza :has()
   // Pusha una entry di history dedicata: così il tasto indietro su mobile
   // chiude l'anteprima invece di navigare alla pagina/tab sottostante.
   _previewOpenViaHistory = true;
@@ -1589,6 +1634,7 @@ function showPreview(p) {
 
 function closePreview() {
   document.getElementById('preview-overlay').classList.remove('open');
+  document.body.classList.remove('preview-aperta');
   // Se l'anteprima era stata aperta con una entry di history dedicata
   // e la chiusura avviene dal pulsante (non dal tasto indietro),
   // consumiamo quella entry tornando indietro "silenziosamente".
